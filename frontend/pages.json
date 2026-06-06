@@ -1,0 +1,26 @@
+{
+  "pdf": "Jujutsu_Kaisen.pdf",
+  "pages": [
+    {
+      "page_number": 7,
+      "total_pages": 11,
+      "mood": "mysterious",
+      "style_prompt": "dark ambient orchestral with eerie strings and subtle percussion, tense and enigmatic",
+      "reason": "A nervous boy clutching an object stands beside a looming panda creature against a shadowed brick wall, creating an unsettling, mysterious atmosphere."
+    },
+    {
+      "page_number": 8,
+      "total_pages": 11,
+      "mood": "mysterious",
+      "style_prompt": "dark eerie orchestral strings with subtle percussion, ominous and suspenseful supernatural atmosphere",
+      "reason": "Shadowy scene with a looming cursed monster mask and confident armed characters introduces a dark supernatural chapter, evoking mystery and dread."
+    },
+    {
+      "page_number": 9,
+      "total_pages": 11,
+      "mood": "tense",
+      "style_prompt": "dark suspenseful orchestral strings, low tremolo, building unease and menacing tension",
+      "reason": "Confrontational dialogue with threats of violence ('I might just end up killing you') and an unsettling, menacing expression create a tense, hostile standoff."
+    }
+  ]
+}
