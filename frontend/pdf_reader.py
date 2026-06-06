@@ -56,7 +56,7 @@ PROMPT_MAX_CHARS = 200
 DEFAULT_PROMPT = "calm ambient background music"
 
 # ── Vision (Claude) constants ───────────────────────────────────────────────
-VISION_MODEL = "claude-opus-4-8"
+VISION_MODEL = "claude-haiku-4-5"
 PAGE_TEXT_LIMIT = 2000  # chars of page text sent to the vision model
 MOODS = ("calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral")
 
@@ -140,12 +140,15 @@ async def send_pdf(pdf_path: str):
 
 # ── Stage 1: Claude vision analysis -> pages.json ────────────────────────────
 _VISION_SYSTEM = (
-    "You score a single comic/manga/book page for a background-music engine. "
-    "Look at the art and any text, then choose the single mood that best fits "
-    "the scene and write a short musical style prompt for a music generator. "
-    "The style prompt should describe genre, instrumentation, and feeling "
-    "(e.g. 'dark ominous orchestral strings, slow and tense'). Keep it under "
-    "20 words. Pick mood from the allowed set only."
+    "You score a single comic/manga/book page for a three-layer audio engine. "
+    "Look at the art and any text, then produce all four fields:\n"
+    "stable_audio_prompt: Rich music description for a background track (genre, "
+    "instrumentation, mood, e.g. 'dark orchestral tension, low brass, slow and ominous'). "
+    "Under 200 characters.\n"
+    "magenta_mood: The single mood from the allowed set that best fits the melody overlay.\n"
+    "suno_lyrics: Dialogue extracted verbatim from speech bubbles, newline-separated. "
+    "Empty string if there is no readable dialogue.\n"
+    "reason: Brief justification for your choices."
 )
 
 
@@ -162,9 +165,10 @@ def analyze_pages(pdf_path: str, max_pages, vision_model: str, select=None) -> l
     from typing import Literal
 
     class PageMusic(BaseModel):
-        mood: Literal["calm", "tense", "action", "sad",
-                      "mysterious", "triumphant", "neutral"]
-        style_prompt: str
+        stable_audio_prompt: str
+        magenta_mood: Literal["calm", "tense", "action", "sad",
+                               "mysterious", "triumphant", "neutral"]
+        suno_lyrics: str
         reason: str
 
     client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from env
@@ -205,13 +209,14 @@ def analyze_pages(pdf_path: str, max_pages, vision_model: str, select=None) -> l
         entry = {
             "page_number": page["page_number"],
             "total_pages": page["total_pages"],
-            "mood": pm.mood,
-            "style_prompt": pm.style_prompt.strip() or DEFAULT_PROMPT,
+            "stable_audio_prompt": pm.stable_audio_prompt.strip() or DEFAULT_PROMPT,
+            "magenta_mood": pm.magenta_mood,
+            "suno_lyrics": pm.suno_lyrics.strip(),
             "reason": pm.reason,
         }
         results.append(entry)
         print(f"[page {entry['page_number']}/{entry['total_pages']}] "
-              f"mood={entry['mood']!r} prompt={entry['style_prompt']!r}", flush=True)
+              f"mood={entry['magenta_mood']!r} prompt={entry['stable_audio_prompt']!r}", flush=True)
 
     return results
 
@@ -267,8 +272,8 @@ def render_from_analysis(pages: list, out_dir, modal_inference) -> list:
 
     results = []
     for p in pages:
-        mood = p.get("mood", "neutral")
-        prompt = (p.get("style_prompt") or DEFAULT_PROMPT)[:PROMPT_MAX_CHARS]
+        mood = p.get("magenta_mood", p.get("mood", "neutral"))
+        prompt = (p.get("stable_audio_prompt") or p.get("style_prompt") or DEFAULT_PROMPT)[:PROMPT_MAX_CHARS]
         notes_sequence = melody_for_mood(mood)
         print(f"[page {p['page_number']}] mood={mood!r} prompt={prompt!r}", flush=True)
 

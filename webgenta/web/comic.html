@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comic Reader</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141420;
+      --border: #2a2a4a;
+      --accent: #7c3aed;
+      --accent-dim: #4c1d95;
+      --text: #e5e5e5;
+      --muted: #888;
+      --green: #22c55e;
+      --red: #f87171;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Screens ─────────────────────────────────────────────────────────── */
+    .screen { display: none; width: 100%; max-width: 860px; padding: 2rem 1rem; }
+    .screen.active { display: flex; flex-direction: column; align-items: center; gap: 1.5rem; }
+
+    h1 { font-size: 1.2rem; color: var(--accent); letter-spacing: .06em; }
+
+    /* ── Upload screen ───────────────────────────────────────────────────── */
+    #drop-zone {
+      width: 100%;
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 2.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+    }
+    #drop-zone.drag-over { border-color: var(--accent); background: #1a1030; }
+    #drop-zone p { color: var(--muted); font-size: .95rem; }
+    #drop-zone p strong { color: var(--text); }
+    #drop-zone input[type=file] { display: none; }
+
+    #file-info {
+      display: none;
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      gap: 1rem;
+      align-items: center;
+    }
+    #file-info.visible { display: flex; }
+    #file-icon { font-size: 1.8rem; }
+    #file-details { flex: 1; }
+    #file-name { font-weight: 600; word-break: break-all; }
+    #file-meta { color: var(--muted); font-size: .8rem; margin-top: .25rem; }
+
+    .range-row {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+    .range-row label { color: var(--muted); font-size: .9rem; }
+    .range-row input[type=number] {
+      width: 80px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: .4rem .6rem;
+      font-size: .9rem;
+      text-align: center;
+    }
+    .range-row input[type=number]:focus { outline: none; border-color: var(--accent); }
+    #page-count-hint { color: var(--muted); font-size: .8rem; }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────── */
+    button {
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      font-size: .9rem;
+      font-weight: 600;
+      padding: .6rem 1.5rem;
+      border-radius: 7px;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+    }
+    button:hover:not(:disabled) { background: #6d28d9; }
+    button:disabled { opacity: .35; cursor: not-allowed; }
+    button.secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-weight: 400;
+    }
+    button.secondary:hover:not(:disabled) { background: #1e1e38; }
+
+    /* ── Progress screen ─────────────────────────────────────────────────── */
+    #progress-header { text-align: center; }
+    #progress-header p { color: var(--muted); font-size: .85rem; margin-top: .4rem; }
+
+    #progress-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .85rem;
+    }
+    #progress-table th {
+      text-align: center;
+      padding: .5rem .75rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 500;
+    }
+    #progress-table th:first-child { text-align: left; }
+    #progress-table td {
+      padding: .55rem .75rem;
+      border-bottom: 1px solid #1a1a2a;
+      text-align: center;
+    }
+    #progress-table td:first-child { text-align: left; color: var(--muted); font-size: .8rem; }
+
+    .cell-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #2a2a3a;
+      transition: background .3s;
+    }
+    .cell-dot.done  { background: var(--green); }
+    .cell-dot.error { background: var(--red); }
+    .cell-dot.spin  {
+      background: var(--accent);
+      animation: spin-pulse .8s infinite;
+    }
+    @keyframes spin-pulse {
+      0%,100% { opacity:1; } 50% { opacity:.3; }
+    }
+
+    #reader-unlock-banner {
+      display: none;
+      width: 100%;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: .9rem 1.25rem;
+      text-align: center;
+      gap: .75rem;
+      align-items: center;
+      justify-content: center;
+    }
+    #reader-unlock-banner.visible { display: flex; }
+    #reader-unlock-banner span { font-size: .9rem; }
+
+    /* ── Reader screen ───────────────────────────────────────────────────── */
+    #screen-reader { padding-top: 1rem; }
+
+    #page-wrap { position: relative; width: 100%; }
+    #page-img {
+      display: block;
+      width: 100%;
+      border-radius: 8px;
+      box-shadow: 0 0 40px #0008;
+      min-height: 220px;
+      background: var(--surface);
+    }
+    #gen-badge {
+      position: absolute;
+      top: 12px; right: 12px;
+      background: var(--accent);
+      color: #fff;
+      font-size: .72rem;
+      font-weight: 700;
+      padding: .28rem .7rem;
+      border-radius: 999px;
+      opacity: 0;
+      transition: opacity .2s;
+      pointer-events: none;
+    }
+    #gen-badge.visible { opacity: 1; }
+
+    #reader-nav {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+    #page-counter { font-size: .9rem; color: var(--accent); min-width: 70px; text-align: center; }
+
+    #track-strip {
+      display: flex;
+      gap: 1.5rem;
+      font-size: .75rem;
+      color: var(--muted);
+    }
+    .tdot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: .4em;
+      background: #333;
+      vertical-align: middle;
+      transition: background .25s;
+    }
+    .tdot.ready   { background: var(--green); }
+    .tdot.playing { background: var(--accent); animation: spin-pulse .9s infinite; }
+
+    #back-to-upload {
+      font-size: .75rem;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+    #back-to-upload:hover { color: var(--text); }
+
+    /* ── Shared error ────────────────────────────────────────────────────── */
+    #conn-error {
+      display: none;
+      position: fixed;
+      bottom: 1rem; left: 50%;
+      transform: translateX(-50%);
+      background: #3b0a0a;
+      border: 1px solid var(--red);
+      color: var(--red);
+      font-size: .8rem;
+      padding: .5rem 1rem;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Screen 1: Upload ─────────────────────────────────────────────── -->
+  <div id="screen-upload" class="screen active">
+    <h1>Comic Reader</h1>
+
+    <div id="drop-zone">
+      <p>Drop a PDF here or <strong>click to browse</strong></p>
+      <input type="file" id="pdf-input" accept=".pdf" />
+    </div>
+
+    <div id="file-info">
+      <div id="file-icon">📄</div>
+      <div id="file-details">
+        <div id="file-name"></div>
+        <div id="file-meta"></div>
+      </div>
+    </div>
+
+    <div class="range-row" id="range-row" style="display:none">
+      <label>Pages</label>
+      <input type="number" id="page-from" value="1" min="1" />
+      <label>to</label>
+      <input type="number" id="page-to" min="1" placeholder="all" />
+      <span id="page-count-hint"></span>
+    </div>
+
+    <button id="generate-btn" disabled>Generate Soundtrack</button>
+  </div>
+
+  <!-- ── Screen 2: Progress ──────────────────────────────────────────── -->
+  <div id="screen-progress" class="screen">
+    <h1>Comic Reader</h1>
+    <div id="progress-header">
+      <p id="progress-status-text">Analyzing pages…</p>
+    </div>
+
+    <div id="reader-unlock-banner">
+      <span>🎵 First pages ready!</span>
+      <button id="start-reading-btn">Start Reading</button>
+    </div>
+
+    <table id="progress-table">
+      <thead>
+        <tr>
+          <th>Page</th>
+          <th>Analyzed</th>
+          <th>Background</th>
+          <th>Melody</th>
+          <th>Voice</th>
+        </tr>
+      </thead>
+      <tbody id="progress-tbody"></tbody>
+    </table>
+
+    <button class="secondary" id="cancel-btn">Cancel &amp; re-upload</button>
+  </div>
+
+  <!-- ── Screen 3: Reader ─────────────────────────────────────────────── -->
+  <div id="screen-reader" class="screen">
+    <div id="page-wrap">
+      <img id="page-img" src="" alt="Comic page" />
+      <div id="gen-badge">Generating…</div>
+    </div>
+
+    <div id="reader-nav">
+      <button id="prev-btn" class="secondary" disabled>← Prev</button>
+      <span id="page-counter">—</span>
+      <button id="next-btn" disabled>Next →</button>
+    </div>
+
+    <div id="track-strip">
+      <span><span class="tdot" id="bg-dot"></span>Background</span>
+      <span><span class="tdot" id="melody-dot"></span>Melody</span>
+      <span><span class="tdot" id="voice-dot"></span>Voice</span>
+    </div>
+
+    <button id="back-to-upload">← Upload a different comic</button>
+  </div>
+
+  <div id="conn-error">Cannot connect to server — is model_server.py running?</div>
+
+  <!-- Audio elements -->
+  <audio id="bg-audio" loop></audio>
+  <audio id="melody-audio"></audio>
+  <audio id="voice-audio"></audio>
+
+  <script>
+    // ── Config ──────────────────────────────────────────────────────────────
+    const WS_URL  = `ws://${location.host}/ws`;
+    const API     = `http://${location.host}`;
+
+    // ── DOM refs ─────────────────────────────────────────────────────────────
+    const screens = {
+      upload:   document.getElementById("screen-upload"),
+      progress: document.getElementById("screen-progress"),
+      reader:   document.getElementById("screen-reader"),
+    };
+
+    // Upload
+    const dropZone     = document.getElementById("drop-zone");
+    const pdfInput     = document.getElementById("pdf-input");
+    const fileInfo     = document.getElementById("file-info");
+    const fileName     = document.getElementById("file-name");
+    const fileMeta     = document.getElementById("file-meta");
+    const rangeRow     = document.getElementById("range-row");
+    const pageFrom     = document.getElementById("page-from");
+    const pageTo       = document.getElementById("page-to");
+    const pageCountHint= document.getElementById("page-count-hint");
+    const generateBtn  = document.getElementById("generate-btn");
+
+    // Progress
+    const progressStatusText = document.getElementById("progress-status-text");
+    const progressTbody      = document.getElementById("progress-tbody");
+    const readerBanner       = document.getElementById("reader-unlock-banner");
+    const startReadingBtn    = document.getElementById("start-reading-btn");
+    const cancelBtn          = document.getElementById("cancel-btn");
+
+    // Reader
+    const pageImg    = document.getElementById("page-img");
+    const genBadge   = document.getElementById("gen-badge");
+    const pageCounter= document.getElementById("page-counter");
+    const nextBtn    = document.getElementById("next-btn");
+    const prevBtn    = document.getElementById("prev-btn");
+    const bgDot      = document.getElementById("bg-dot");
+    const melodyDot  = document.getElementById("melody-dot");
+    const voiceDot   = document.getElementById("voice-dot");
+    const backBtn    = document.getElementById("back-to-upload");
+    const connError  = document.getElementById("conn-error");
+
+    const bgAudio     = document.getElementById("bg-audio");
+    const melodyAudio = document.getElementById("melody-audio");
+    const voiceAudio  = document.getElementById("voice-audio");
+    bgAudio.volume    = 0.3;
+    melodyAudio.volume= 0.6;
+    voiceAudio.volume = 1.0;
+
+    // ── State ────────────────────────────────────────────────────────────────
+    let ws              = null;
+    let currentPage     = 1;
+    let totalPages      = 1;
+    let _pendingPageReq = null; // page number queued while WS is reconnecting
+    let pendingTrack  = null;
+    let pendingMime   = "audio/wav";
+    let hasMelody     = false;
+    let readerReady   = false;
+    let selectedFile  = null;
+
+    // Page cache: Map<readerPageNum, {bg, melody, voice}>
+    const pageCache = new Map();
+    let _pendingUrls = { bg: null, melody: null, voice: null };
+
+    window.addEventListener("beforeunload", () => {
+      pageCache.forEach(c => {
+        [c.bg, c.melody, c.voice].forEach(u => u && URL.revokeObjectURL(u));
+      });
+    });
+
+    // Progress tracking: Map<pdfPageNum, {analyzed, stable, magenta, suno}>
+    const pageProgress = new Map();
+    // Ordered list of selected PDF page numbers (from server)
+    let pdfPageList = [];
+
+    // ── Screen switching ──────────────────────────────────────────────────────
+    function showScreen(name) {
+      Object.values(screens).forEach(s => s.classList.remove("active"));
+      screens[name].classList.add("active");
+    }
+
+    // ── Upload screen logic ───────────────────────────────────────────────────
+    dropZone.addEventListener("click", () => pdfInput.click());
+    dropZone.addEventListener("dragover", e => {
+      e.preventDefault();
+      dropZone.classList.add("drag-over");
+    });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("drag-over");
+      const f = e.dataTransfer.files[0];
+      if (f && f.type === "application/pdf") onFileSelected(f);
+    });
+    pdfInput.addEventListener("change", () => {
+      if (pdfInput.files[0]) onFileSelected(pdfInput.files[0]);
+    });
+
+    async function onFileSelected(file) {
+      selectedFile = file;
+      fileName.textContent = file.name;
+      fileMeta.textContent = `${(file.size / 1024 / 1024).toFixed(1)} MB`;
+      fileInfo.classList.add("visible");
+      rangeRow.style.display = "flex";
+      generateBtn.disabled = true;
+      pageCountHint.textContent = "Reading page count…";
+
+      // Peek: get total page count without starting generation
+      const fd = new FormData();
+      fd.append("pdf", file);
+      try {
+        const r = await fetch(`${API}/peek`, { method: "POST", body: fd });
+        const data = await r.json();
+        const total = data.total_pages || 0;
+        pageCountHint.textContent = `(${total} pages total)`;
+        pageTo.max = total;
+        pageTo.placeholder = String(total);
+        pageFrom.max = total;
+        generateBtn.disabled = false;
+      } catch {
+        pageCountHint.textContent = "(could not read page count)";
+        generateBtn.disabled = false;
+      }
+    }
+
+    generateBtn.addEventListener("click", async () => {
+      if (!selectedFile) return;
+      generateBtn.disabled = true;
+      generateBtn.textContent = "Uploading…";
+
+      const fd = new FormData();
+      fd.append("pdf", selectedFile);
+      fd.append("page_from", pageFrom.value || "1");
+      fd.append("page_to", pageTo.value || "");
+
+      try {
+        const r = await fetch(`${API}/upload`, { method: "POST", body: fd });
+        const data = await r.json();
+        if (data.error) { alert(data.error); generateBtn.disabled = false; generateBtn.textContent = "Generate Soundtrack"; return; }
+
+        pdfPageList = data.selected_pages;
+        buildProgressTable(pdfPageList);
+        pageCache.clear();
+        readerReady = false;
+        readerBanner.classList.remove("visible");
+        showScreen("progress");
+        generateBtn.textContent = "Generate Soundtrack";
+        connectWs();
+      } catch (e) {
+        alert("Upload failed: " + e);
+        generateBtn.disabled = false;
+        generateBtn.textContent = "Generate Soundtrack";
+      }
+    });
+
+    // ── Progress table ────────────────────────────────────────────────────────
+    function buildProgressTable(pdfPages) {
+      progressTbody.innerHTML = "";
+      pageProgress.clear();
+      pdfPages.forEach((pnum, idx) => {
+        pageProgress.set(pnum, { analyzed: false, stable: false, magenta: false, suno: false });
+        const tr = document.createElement("tr");
+        tr.id = `row-${pnum}`;
+        tr.innerHTML = `
+          <td>Page ${idx + 1} <span style="color:#555">(pdf ${pnum})</span></td>
+          <td><span class="cell-dot" id="dot-${pnum}-analyzed"></span></td>
+          <td><span class="cell-dot" id="dot-${pnum}-stable"></span></td>
+          <td><span class="cell-dot" id="dot-${pnum}-magenta"></span></td>
+          <td><span class="cell-dot" id="dot-${pnum}-suno"></span></td>
+        `;
+        progressTbody.appendChild(tr);
+      });
+    }
+
+    function setDotState(pnum, key, state /* "spin" | "done" | "error" */) {
+      const el = document.getElementById(`dot-${pnum}-${key}`);
+      if (el) { el.className = `cell-dot ${state}`; }
+    }
+
+    function updateProgressStatus() {
+      const total = pdfPageList.length;
+      const analyzed = [...pageProgress.values()].filter(p => p.analyzed).length;
+      const stableDone = [...pageProgress.values()].filter(p => p.stable).length;
+      if (analyzed < total) {
+        progressStatusText.textContent = `Analyzing pages… ${analyzed}/${total}`;
+      } else {
+        const tracksTotal = total * 3;
+        const tracksDone = [...pageProgress.values()].reduce((s, p) =>
+          s + (p.stable ? 1 : 0) + (p.magenta ? 1 : 0) + (p.suno ? 1 : 0), 0);
+        progressStatusText.textContent = `Generating audio… ${tracksDone}/${tracksTotal} tracks`;
+      }
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+    function connectWs() {
+      if (ws && ws.readyState <= 1) return; // already open/connecting
+      ws = new WebSocket(WS_URL);
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = () => {
+        connError.style.display = "none";
+        if (_pendingPageReq !== null) {
+          const n = _pendingPageReq;
+          _pendingPageReq = null;
+          requestPage(n);
+        }
+      };
+      ws.onerror = () => connError.style.display = "block";
+      ws.onclose = () => {
+        // Don't auto-reconnect during upload screen; only in progress/reader
+        const active = document.querySelector(".screen.active");
+        if (active && active.id !== "screen-upload") {
+          setTimeout(connectWs, 3000);
+        }
+      };
+
+      ws.onmessage = (e) => {
+        if (typeof e.data === "string") handleJson(JSON.parse(e.data));
+        else handleBinary(e.data);
+      };
+    }
+
+    function handleJson(msg) {
+      // ── Status events ──────────────────────────────────────────────────
+      if (msg.type === "status") {
+        const s = msg.status;
+        if (s === "analyzing") {
+          progressStatusText.textContent = `Analyzing pages…`;
+          // Spin first analyzed dot
+          if (pdfPageList.length) setDotState(pdfPageList[0], "analyzed", "spin");
+        } else if (s === "generating") {
+          progressStatusText.textContent = "Generating audio tracks…";
+        } else if (s === "error") {
+          progressStatusText.textContent = "Error: " + (msg.message || "analysis failed");
+          progressStatusText.style.color = "var(--red)";
+        } else if (s === "reader_ready" && !readerReady) {
+          readerReady = true;
+          readerBanner.classList.add("visible");
+          // Auto-start reader
+          startReader();
+        } else if (s === "ready") {
+          progressStatusText.textContent = "All tracks ready.";
+        }
+
+        // Restore progress dots from synced state (on WS reconnect)
+        if (msg.progress) {
+          Object.entries(msg.progress).forEach(([pnum, p]) => {
+            const n = parseInt(pnum);
+            if (p.analyzed) setDotState(n, "analyzed", "done");
+            if (p.stable)   setDotState(n, "stable", "done");
+            if (p.magenta)  setDotState(n, "magenta", "done");
+            if (p.suno)     setDotState(n, "suno", "done");
+          });
+        }
+        return;
+      }
+
+      // ── Analysis event ─────────────────────────────────────────────────
+      if (msg.type === "analyzed") {
+        const pnum = msg.pdf_page;
+        if (pageProgress.has(pnum)) {
+          pageProgress.get(pnum).analyzed = true;
+          setDotState(pnum, "analyzed", "done");
+          // Spin the gen dots to show generation is starting
+          setDotState(pnum, "stable",  "spin");
+          setDotState(pnum, "magenta", "spin");
+          setDotState(pnum, "suno",    msg.has_lyrics ? "spin" : "done");
+          if (!msg.has_lyrics && pageProgress.has(pnum)) {
+            pageProgress.get(pnum).suno = true;
+          }
+          // Spin the next page's analyzed dot
+          const idx = pdfPageList.indexOf(pnum);
+          if (idx + 1 < pdfPageList.length) setDotState(pdfPageList[idx + 1], "analyzed", "spin");
+        }
+        updateProgressStatus();
+        return;
+      }
+
+      // ── Track generation progress ──────────────────────────────────────
+      if (msg.type === "progress") {
+        const pnum = msg.pdf_page;
+        const track = msg.track; // stable | magenta | suno
+        if (pageProgress.has(pnum)) {
+          pageProgress.get(pnum)[track] = true;
+          const col = track === "stable" ? "stable" : track === "magenta" ? "magenta" : "suno";
+          setDotState(pnum, col, "done");
+        }
+        updateProgressStatus();
+        return;
+      }
+
+      // ── Reader messages ────────────────────────────────────────────────
+      if (msg.type === "page") {
+        currentPage = msg.page_number;
+        totalPages  = msg.total;
+        setPageCounter(currentPage, totalPages);
+        pageImg.src = `data:image/png;base64,${msg.image_b64}`;
+        genBadge.classList.remove("visible");
+        hasMelody = false;
+        _pendingUrls = { bg: null, melody: null, voice: null };
+        resetDots();
+
+      } else if (msg.type === "track_header") {
+        pendingTrack = msg.track;
+        pendingMime  = msg.mime || (msg.track === "voice" ? "audio/mpeg" : "audio/wav");
+        if (msg.track === "melody") hasMelody = true;
+
+      } else if (msg.type === "tracks_end") {
+        // Cache and play
+        pageCache.set(currentPage, { ..._pendingUrls });
+        stopAll();
+        if (_pendingUrls.bg)     bgAudio.src     = _pendingUrls.bg;
+        if (_pendingUrls.melody) melodyAudio.src = _pendingUrls.melody;
+        if (_pendingUrls.voice)  voiceAudio.src  = _pendingUrls.voice;
+        playAll(_pendingUrls);
+        if (!hasMelody) nextBtn.disabled = currentPage >= totalPages;
+
+      } else if (msg.type === "error") {
+        console.error("Server error:", msg.message);
+        genBadge.classList.remove("visible");
+      }
+    }
+
+    function handleBinary(data) {
+      if (!pendingTrack) return;
+      const blob = new Blob([data], { type: pendingMime });
+      const url  = URL.createObjectURL(blob);
+      if      (pendingTrack === "background") _pendingUrls.bg     = url;
+      else if (pendingTrack === "melody")     _pendingUrls.melody = url;
+      else if (pendingTrack === "voice")      _pendingUrls.voice  = url;
+      pendingTrack = null;
+    }
+
+    // ── Reader logic ──────────────────────────────────────────────────────────
+    function startReader() {
+      showScreen("reader");
+      requestPage(1);
+    }
+
+    function requestPage(n) {
+      if (pageCache.has(n)) {
+        serveCached(n);
+        return;
+      }
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        // WS is reconnecting — queue the request and show the badge
+        _pendingPageReq = n;
+        genBadge.classList.add("visible");
+        return;
+      }
+      _pendingPageReq = null;
+      genBadge.classList.add("visible");
+      nextBtn.disabled = true;
+      hasMelody = false;
+      pendingTrack = null;
+      _pendingUrls = { bg: null, melody: null, voice: null };
+      resetDots();
+      ws.send(JSON.stringify({ type: "get_page", page: n }));
+    }
+
+    function serveCached(n) {
+      const c = pageCache.get(n);
+      nextBtn.disabled = true;
+      hasMelody = !!c.melody;
+      stopAll();
+      if (c.bg)     { bgAudio.src     = c.bg;     setTdot("bg-dot",     "ready"); }
+      if (c.melody) { melodyAudio.src = c.melody; setTdot("melody-dot", "ready"); }
+      if (c.voice)  { voiceAudio.src  = c.voice;  setTdot("voice-dot",  "ready"); }
+      setPageCounter(n, totalPages);
+      playAll(c);
+    }
+
+    function stopAll() {
+      [bgAudio, melodyAudio, voiceAudio].forEach(a => { a.pause(); a.currentTime = 0; });
+    }
+
+    function playAll(urls) {
+      if (urls.bg)     { bgAudio.play().catch(() => {});     setTdot("bg-dot",     "playing"); }
+      if (urls.melody) { melodyAudio.play().catch(() => {}); setTdot("melody-dot", "playing"); }
+      if (urls.voice)  { voiceAudio.play().catch(() => {});  setTdot("voice-dot",  "playing"); }
+    }
+
+    function setPageCounter(n, total) {
+      pageCounter.textContent = `${n} / ${total}`;
+      prevBtn.disabled = n <= 1;
+    }
+
+    function setTdot(id, state) {
+      const el = document.getElementById(id);
+      if (el) el.className = `tdot ${state}`;
+    }
+
+    function resetDots() {
+      ["bg-dot", "melody-dot", "voice-dot"].forEach(id => setTdot(id, ""));
+    }
+
+    // Melody ended → unlock Next
+    melodyAudio.addEventListener("ended", () => {
+      setTdot("melody-dot", "ready");
+      nextBtn.disabled = currentPage >= totalPages;
+    });
+    bgAudio.addEventListener("play",  () => setTdot("bg-dot", "playing"));
+    bgAudio.addEventListener("pause", () => setTdot("bg-dot", "ready"));
+    voiceAudio.addEventListener("ended", () => setTdot("voice-dot", "ready"));
+
+    nextBtn.addEventListener("click", () => {
+      if (currentPage < totalPages) { currentPage++; requestPage(currentPage); }
+    });
+    prevBtn.addEventListener("click", () => {
+      if (currentPage > 1) { currentPage--; requestPage(currentPage); }
+    });
+
+    // ── Misc ──────────────────────────────────────────────────────────────────
+    startReadingBtn.addEventListener("click", startReader);
+
+    cancelBtn.addEventListener("click", () => {
+      if (ws) { ws.close(); ws = null; }
+      showScreen("upload");
+    });
+
+    backBtn.addEventListener("click", () => {
+      stopAll();
+      if (ws) { ws.close(); ws = null; }
+      // Reset upload form
+      selectedFile = null;
+      pdfInput.value = "";
+      fileInfo.classList.remove("visible");
+      rangeRow.style.display = "none";
+      pageCountHint.textContent = "";
+      generateBtn.disabled = true;
+      showScreen("upload");
+    });
+
+    // Connect WS on load to get current server status (idle by default)
+    connectWs();
+  </script>
+</body>
+</html>
