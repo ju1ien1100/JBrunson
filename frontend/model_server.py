@@ -70,8 +70,14 @@ async def handler(websocket):
             try:
                 result = process_page(data)
             except (KeyError, ValueError) as exc:
-                print(f"Error processing page, skipping: {exc}")
-                continue
+                # The client blocks on recv() after each page, so we must
+                # always reply — otherwise a failed page deadlocks it.
+                print(f"Error processing page, sending error reply: {exc}")
+                result = {
+                    "type": "page_error",
+                    "page_number": data.get("page_number"),
+                    "error": str(exc),
+                }
             await websocket.send(json.dumps(result))
 
 

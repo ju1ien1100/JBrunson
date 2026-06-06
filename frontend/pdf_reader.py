@@ -54,7 +54,11 @@ async def send_pdf(pdf_path: str):
             # Wait for the model's response for this page
             response = await ws.recv()
             result = json.loads(response)
-            print(f"  -> model: {result.get('summary', result)}")
+            if result.get("type") == "page_error":
+                print(f"  -> server error on page "
+                      f"{result.get('page_number')}: {result.get('error')}")
+            else:
+                print(f"  -> model: {result.get('summary', result)}")
 
         # Signal completion
         await ws.send(json.dumps({"type": "done"}))
