@@ -33,4 +33,7 @@ Thumbs.db
 # Secrets
 .env
 
+# Downloaded webtoon/comic content (copyrighted — keep out of git)
+data/files/
+
 .drake
