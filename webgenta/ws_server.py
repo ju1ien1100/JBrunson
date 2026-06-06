@@ -11,8 +11,10 @@ Usage:
   python ws_server.py [--host 0.0.0.0] [--port 8765] [--model mrt2_small] [--no-magenta]
 
 Environment variables (set in .env or shell before running):
-  SUNO_API_KEY       — Suno bearer token (sk_live_...)
-  STABILITY_API_KEY  — Stability.ai bearer token
+  SUNO_API_KEY  — Suno bearer token (sk_live_...)
+
+Modal secrets (configured via `modal secret create`):
+  huggingface   — HF_TOKEN for gated model access (needed by --modal-stability)
 """
 
 import os
@@ -127,16 +129,27 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="mrt2_small", choices=["mrt2_small", "mrt2_base"])
     parser.add_argument("--no-magenta", action="store_true", help="Skip MRT2 entirely")
     parser.add_argument("--modal", action="store_true", help="Use Modal GPU for MRT2 instead of local JAX")
+    parser.add_argument("--modal-stability", action="store_true", help="Use Modal GPU for Stable Audio 3 background tracks")
     args = parser.parse_args()
 
     from services.suno import SunoService
     from services.stability import StabilityService
     from services.magenta import MagentaService
 
-    services = {
-        "suno": SunoService(),
-        "stability": StabilityService(),
-    }
+    if args.modal_stability:
+        print("Connecting to Modal GPU for Stable Audio 3...", flush=True)
+        import modal
+        StableAudioInference = modal.Cls.from_name("webgenta-stability", "StableAudioInference")
+        services = {
+            "suno": SunoService(),
+            "stability": StabilityService(modal_inference=StableAudioInference()),
+        }
+        print("Modal Stable Audio 3 ready (GPU warms up on first request).", flush=True)
+    else:
+        services = {
+            "suno": SunoService(),
+            "stability": StabilityService(),
+        }
 
     if not args.no_magenta:
         if args.modal:

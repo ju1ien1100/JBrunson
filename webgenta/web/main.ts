@@ -238,7 +238,124 @@ function stopViz() {
   ctx2d.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+// ─── Shared service card helper ──────────────────────────────────────────────
+
+function makeServiceStatus(statusEl: HTMLSpanElement, btn: HTMLButtonElement) {
+  return function set(s: "idle" | "generating" | "done" | "error", detail = "") {
+    statusEl.dataset.status = s;
+    statusEl.textContent = s === "error" ? `Error${detail ? ": " + detail : ""}` : { idle: "Idle", generating: "Generating…", done: "Done" }[s]!;
+    btn.disabled = s === "generating";
+  };
+}
+
+// ─── Suno: Anime Voice ───────────────────────────────────────────────────────
+
+const sunoBtn    = document.getElementById("suno-btn") as HTMLButtonElement;
+const sunoStatusEl = document.getElementById("suno-status") as HTMLSpanElement;
+const sunoAudio  = document.getElementById("suno-audio") as HTMLAudioElement;
+const setSunoStatus = makeServiceStatus(sunoStatusEl, sunoBtn);
+
+sunoBtn.addEventListener("click", () => {
+  setSunoStatus("generating");
+  sunoAudio.style.display = "none";
+
+  const sunoWs = new WebSocket(serverInput.value.trim());
+  sunoWs.onopen = () => {
+    sunoWs.send(JSON.stringify({
+      service: "suno",
+      action: "generate",
+      style: "a cappella, voice only, no instruments, no background music, no beat, spoken word, anime female voice, kawaii, japanese voice acting, clear speech, dry vocal",
+      lyrics: "Ohayo gozaimasu!",
+      voice_id: "5b915c6d-8d96-416c-9755-eba65868cfef",
+    }));
+  };
+  sunoWs.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data as string);
+      if (data.service !== "suno") return;
+      if (data.event === "submitted") {
+        setSunoStatus("generating");
+      } else if (data.event === "status") {
+        sunoStatusEl.textContent = `${data.state}…`;
+      } else if (data.event === "complete") {
+        setSunoStatus("done");
+        sunoAudio.src = data.audio_url as string;
+        sunoAudio.style.display = "block";
+        sunoAudio.play();
+      } else if (data.event === "error") {
+        setSunoStatus("error", data.message as string);
+      }
+    } catch { /* ignore */ }
+  };
+  sunoWs.onerror = () => setSunoStatus("error", "WebSocket error");
+  sunoWs.onclose = () => {
+    if (sunoStatusEl.dataset.status === "generating") setSunoStatus("error", "connection closed");
+  };
+});
+
+// ─── Stability: Background Track ─────────────────────────────────────────────
+
+const stabilityBtn      = document.getElementById("stability-btn") as HTMLButtonElement;
+const stabilityStatusEl = document.getElementById("stability-status") as HTMLSpanElement;
+const stabilityAudio    = document.getElementById("stability-audio") as HTMLAudioElement;
+const stabilityPrompt   = document.getElementById("stability-prompt") as HTMLInputElement;
+const stabilityDuration = document.getElementById("stability-duration") as HTMLInputElement;
+const stabilityDurLabel = document.getElementById("stability-duration-label") as HTMLSpanElement;
+const setStabilityStatus = makeServiceStatus(stabilityStatusEl, stabilityBtn);
+
+stabilityDuration.addEventListener("input", () => {
+  stabilityDurLabel.textContent = `${stabilityDuration.value}s`;
+});
+
+stabilityBtn.addEventListener("click", () => {
+  setStabilityStatus("generating");
+  stabilityAudio.style.display = "none";
+
+  const stabWs = new WebSocket(serverInput.value.trim());
+  stabWs.binaryType = "arraybuffer";
+
+  stabWs.onopen = () => {
+    stabWs.send(JSON.stringify({
+      service: "stability",
+      action: "generate",
+      prompt: stabilityPrompt.value.trim() || "ambient background music",
+      duration: parseInt(stabilityDuration.value, 10),
+    }));
+  };
+
+  stabWs.onmessage = (e) => {
+    if (e.data instanceof ArrayBuffer) {
+      // Raw WAV bytes — revoke the previous blob URL before creating a new one
+      if (stabilityAudio.src.startsWith("blob:")) URL.revokeObjectURL(stabilityAudio.src);
+      const blob = new Blob([e.data], { type: "audio/wav" });
+      const url = URL.createObjectURL(blob);
+      stabilityAudio.src = url;
+      stabilityAudio.style.display = "block";
+      stabilityAudio.play();
+    } else {
+      try {
+        const data = JSON.parse(e.data as string);
+        if (data.service !== "stability") return;
+        if (data.event === "status") {
+          stabilityStatusEl.textContent = `${data.state}…`;
+        } else if (data.event === "complete") {
+          setStabilityStatus("done");
+        } else if (data.event === "error") {
+          setStabilityStatus("error", data.message as string);
+        }
+      } catch { /* ignore */ }
+    }
+  };
+
+  stabWs.onerror = () => setStabilityStatus("error", "WebSocket error");
+  stabWs.onclose = () => {
+    if (stabilityStatusEl.dataset.status === "generating") setStabilityStatus("error", "connection closed");
+  };
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 initMidi();
 setStatus("idle");
+setSunoStatus("idle");
+setStabilityStatus("idle");

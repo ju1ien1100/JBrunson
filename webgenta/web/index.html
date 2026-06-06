@@ -139,6 +139,45 @@
       font-size: 0.75rem;
       text-align: center;
     }
+
+    .section-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .service-status {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 99px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      background: var(--border);
+      color: var(--muted);
+    }
+
+    .service-status[data-status="generating"] {
+      background: #1c1917;
+      color: #fbbf24;
+    }
+
+    .service-status[data-status="done"] {
+      background: #14532d;
+      color: #86efac;
+    }
+
+    .service-status[data-status="error"] {
+      background: #450a0a;
+      color: #fca5a5;
+    }
+
+    input[type="range"] {
+      accent-color: var(--purple);
+      padding: 0;
+    }
   </style>
 </head>
 <body>
@@ -174,6 +213,35 @@
     Connect to start streaming · Change the prompt while streaming to update style ·
     MIDI channel 10 = drums
   </p>
+
+  <!-- ── Suno: Anime Voice ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="section-title">Suno — Anime Voice</div>
+    <p class="hint" style="text-align:left">Generates an anime character saying "Ohayo gozaimasu!" via Suno API.</p>
+    <div class="row">
+      <button id="suno-btn">Generate</button>
+      <span id="suno-status" class="service-status" data-status="idle">Idle</span>
+    </div>
+    <audio id="suno-audio" controls style="display:none; width:100%"></audio>
+  </div>
+
+  <!-- ── Stability: Background Track ──────────────────────────────────── -->
+  <div class="card">
+    <div class="section-title">Stable Audio 3 — Background Track</div>
+    <label>
+      Prompt
+      <input id="stability-prompt" type="text" placeholder="epic orchestral battle music, cinematic, no vocals" value="ambient lo-fi piano, peaceful, no vocals" />
+    </label>
+    <label>
+      Duration — <span id="stability-duration-label">30s</span>
+      <input id="stability-duration" type="range" min="5" max="120" value="30" step="5" />
+    </label>
+    <div class="row">
+      <button id="stability-btn">Generate</button>
+      <span id="stability-status" class="service-status" data-status="idle">Idle</span>
+    </div>
+    <audio id="stability-audio" controls style="display:none; width:100%"></audio>
+  </div>
 
   <script type="module" src="main.ts"></script>
 </body>
