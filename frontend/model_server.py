@@ -13,6 +13,10 @@ import websockets
 HOST = "localhost"
 PORT = 8765
 
+# Max WebSocket frame size (50 MB). Bounds peak memory per message; must match
+# (or exceed) the client's send size in pdf_reader.py.
+MAX_FRAME_SIZE = 50 * 1024 * 1024
+
 
 def process_page(page: dict) -> dict:
     """
@@ -52,20 +56,28 @@ def process_page(page: dict) -> dict:
 async def handler(websocket):
     print("Client connected.")
     async for message in websocket:
-        data = json.loads(message)
+        try:
+            data = json.loads(message)
+        except json.JSONDecodeError as exc:
+            print(f"Invalid JSON from client, skipping message: {exc}")
+            continue
 
         if data.get("type") == "done":
             print("Client finished sending.")
             break
 
         if data.get("type") == "page":
-            result = process_page(data)
+            try:
+                result = process_page(data)
+            except (KeyError, ValueError) as exc:
+                print(f"Error processing page, skipping: {exc}")
+                continue
             await websocket.send(json.dumps(result))
 
 
 async def main():
     print(f"Model server listening on ws://{HOST}:{PORT}")
-    async with websockets.serve(handler, HOST, PORT, max_size=None):
+    async with websockets.serve(handler, HOST, PORT, max_size=MAX_FRAME_SIZE):
         await asyncio.Future()  # run forever
 
 

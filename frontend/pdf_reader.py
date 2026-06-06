@@ -14,33 +14,38 @@ import websockets
 
 WS_URI = "ws://localhost:8765"
 
+# Max WebSocket frame size (50 MB). A 150-DPI PNG page base64-encoded can be
+# several MB, so this bounds peak memory while leaving comfortable headroom.
+MAX_FRAME_SIZE = 50 * 1024 * 1024
+
 
 def extract_pages(pdf_path: str):
     """Yield one dict per page: page number, text, and a PNG image (base64)."""
-    doc = fitz.open(pdf_path)
-    for page_index in range(len(doc)):
-        page = doc[page_index]
+    # Use a context manager so the file handle is released even if the caller
+    # breaks out early or an exception is raised mid-extraction.
+    with fitz.open(pdf_path) as doc:
+        for page_index in range(len(doc)):
+            page = doc[page_index]
 
-        # Extract text (speech bubbles / prose)
-        text = page.get_text("text").strip()
+            # Extract text (speech bubbles / prose)
+            text = page.get_text("text").strip()
 
-        # Render the page to a PNG image (the panel/illustration)
-        pix = page.get_pixmap(dpi=150)
-        img_bytes = pix.tobytes("png")
-        img_b64 = base64.b64encode(img_bytes).decode("ascii")
+            # Render the page to a PNG image (the panel/illustration)
+            pix = page.get_pixmap(dpi=150)
+            img_bytes = pix.tobytes("png")
+            img_b64 = base64.b64encode(img_bytes).decode("ascii")
 
-        yield {
-            "type": "page",
-            "page_number": page_index + 1,
-            "total_pages": len(doc),
-            "text": text,
-            "image_png_b64": img_b64,
-        }
-    doc.close()
+            yield {
+                "type": "page",
+                "page_number": page_index + 1,
+                "total_pages": len(doc),
+                "text": text,
+                "image_png_b64": img_b64,
+            }
 
 
 async def send_pdf(pdf_path: str):
-    async with websockets.connect(WS_URI, max_size=None) as ws:
+    async with websockets.connect(WS_URI, max_size=MAX_FRAME_SIZE) as ws:
         for page in extract_pages(pdf_path):
             await ws.send(json.dumps(page))
             print(f"Sent page {page['page_number']}/{page['total_pages']} "
