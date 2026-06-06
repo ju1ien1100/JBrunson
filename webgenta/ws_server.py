@@ -127,16 +127,27 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="mrt2_small", choices=["mrt2_small", "mrt2_base"])
     parser.add_argument("--no-magenta", action="store_true", help="Skip MRT2 entirely")
     parser.add_argument("--modal", action="store_true", help="Use Modal GPU for MRT2 instead of local JAX")
+    parser.add_argument("--modal-stability", action="store_true", help="Use Modal GPU for Stable Audio 3 background tracks")
     args = parser.parse_args()
 
     from services.suno import SunoService
     from services.stability import StabilityService
     from services.magenta import MagentaService
 
-    services = {
-        "suno": SunoService(),
-        "stability": StabilityService(),
-    }
+    if args.modal_stability:
+        print("Connecting to Modal GPU for Stable Audio 3...", flush=True)
+        import modal
+        StableAudioInference = modal.Cls.from_name("webgenta-stability", "StableAudioInference")
+        services = {
+            "suno": SunoService(),
+            "stability": StabilityService(modal_inference=StableAudioInference()),
+        }
+        print("Modal Stable Audio 3 ready (GPU warms up on first request).", flush=True)
+    else:
+        services = {
+            "suno": SunoService(),
+            "stability": StabilityService(),
+        }
 
     if not args.no_magenta:
         if args.modal:
