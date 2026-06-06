@@ -61,12 +61,43 @@ PAGE_TEXT_LIMIT = 2000  # chars of page text sent to the vision model
 MOODS = ("calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral")
 
 
-def extract_pages(pdf_path: str):
-    """Yield one dict per page: page number, text, and a PNG image (base64)."""
+def parse_page_spec(spec):
+    """Parse a page selection like '7', '7,8,9', '7-9', '1,3,5-7' -> set of ints.
+
+    Page numbers are 1-based. Returns None for an empty/None spec (meaning all).
+    """
+    if not spec:
+        return None
+    pages = set()
+    for part in str(spec).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            lo, hi = int(lo), int(hi)
+            if lo > hi:
+                lo, hi = hi, lo
+            pages.update(range(lo, hi + 1))
+        else:
+            pages.add(int(part))
+    if any(p < 1 for p in pages):
+        raise ValueError(f"page numbers must be >= 1 (got {sorted(pages)})")
+    return pages or None
+
+
+def extract_pages(pdf_path: str, select=None):
+    """Yield one dict per page: page number, text, and a PNG image (base64).
+
+    If `select` (a set of 1-based page numbers) is given, only those pages are
+    rendered and yielded — unselected pages are skipped without rendering.
+    """
     # Use a context manager so the file handle is released even if the caller
     # breaks out early or an exception is raised mid-extraction.
     with fitz.open(pdf_path) as doc:
         for page_index in range(len(doc)):
+            if select is not None and (page_index + 1) not in select:
+                continue  # skip rendering pages we don't need
             page = doc[page_index]
 
             # Extract text (speech bubbles / prose)
@@ -118,9 +149,11 @@ _VISION_SYSTEM = (
 )
 
 
-def analyze_pages(pdf_path: str, max_pages, vision_model: str) -> list:
+def analyze_pages(pdf_path: str, max_pages, vision_model: str, select=None) -> list:
     """Use Claude vision to assign a mood + style prompt to each page.
 
+    `select` (set of 1-based page numbers) analyzes exactly those pages and
+    ignores `max_pages`. Otherwise `max_pages` limits to the first N pages.
     Returns [{page_number, total_pages, mood, style_prompt, reason}].
     Requires `pip install anthropic` and ANTHROPIC_API_KEY in the environment.
     """
@@ -138,8 +171,8 @@ def analyze_pages(pdf_path: str, max_pages, vision_model: str) -> list:
 
     results = []
     count = 0
-    for page in extract_pages(pdf_path):
-        if max_pages is not None and count >= max_pages:
+    for page in extract_pages(pdf_path, select=select):
+        if select is None and max_pages is not None and count >= max_pages:
             break
         count += 1
 
@@ -183,14 +216,25 @@ def analyze_pages(pdf_path: str, max_pages, vision_model: str) -> list:
     return results
 
 
-def run_analyze(pdf_path: str, max_pages, out_path: str, vision_model: str) -> int:
-    pages = analyze_pages(pdf_path, max_pages, vision_model)
+def run_analyze(pdf_path: str, max_pages, out_path: str, vision_model: str,
+                select=None, append=False) -> int:
+    pages = analyze_pages(pdf_path, max_pages, vision_model, select=select)
     if not pages:
         print("No pages analyzed; nothing written.", file=sys.stderr)
         return 1
+
+    if append and Path(out_path).exists():
+        # Merge into existing pages.json, replacing any pages we just re-analyzed.
+        existing = json.loads(Path(out_path).read_text()).get("pages", [])
+        new_nums = {p["page_number"] for p in pages}
+        merged = [p for p in existing if p["page_number"] not in new_nums] + pages
+        pages = sorted(merged, key=lambda p: p["page_number"])
+        print(f"Merged with existing {out_path} -> {len(pages)} page(s) total", flush=True)
+
     payload = {"pdf": pdf_path, "pages": pages}
     Path(out_path).write_text(json.dumps(payload, indent=2))
-    print(f"\nWrote {len(pages)} page(s) of analysis to {Path(out_path).resolve()}")
+    nums = ", ".join(str(p["page_number"]) for p in pages)
+    print(f"\nWrote {len(pages)} page(s) [{nums}] of analysis to {Path(out_path).resolve()}")
     return 0
 
 
@@ -241,14 +285,17 @@ def render_from_analysis(pages: list, out_dir, modal_inference) -> list:
     return results
 
 
-def run_modal(pages_json: str, max_pages, out_dir: str, app: str, cls: str) -> int:
+def run_modal(pages_json: str, max_pages, out_dir: str, app: str, cls: str,
+              select=None) -> int:
     """Read pages.json and render each page via the deployed Modal Magenta app."""
     data = json.loads(Path(pages_json).read_text())
     pages = data.get("pages", [])
-    if max_pages is not None:
+    if select is not None:
+        pages = [p for p in pages if p["page_number"] in select]
+    elif max_pages is not None:
         pages = pages[:max_pages]
     if not pages:
-        print("No pages in pages.json; nothing to do.", file=sys.stderr)
+        print("No matching pages in pages.json; nothing to do.", file=sys.stderr)
         return 1
     print(f"Loaded {len(pages)} page(s) from {pages_json}", flush=True)
 
@@ -274,6 +321,10 @@ if __name__ == "__main__":
                         help="Stage 2: render each page from pages.json via the deployed Modal Magenta app")
     parser.add_argument("--pages", type=int, default=None,
                         help="Limit to first N pages (--analyze / --modal). Each page = one GPU render in stage 2.")
+    parser.add_argument("--page-range", default=None,
+                        help="Select specific pages instead of first-N, e.g. '7', '7,8,9', '7-9', '1,3,5-7' (--analyze / --modal).")
+    parser.add_argument("--append", action="store_true",
+                        help="(--analyze) Merge results into an existing pages.json instead of overwriting it.")
     parser.add_argument("--out", default=None,
                         help="Output path: pages.json for --analyze (default pages.json), output dir for --modal (default test_output)")
     parser.add_argument("--pages-json", default="pages.json",
@@ -284,12 +335,19 @@ if __name__ == "__main__":
     parser.add_argument("--cls", default="MagentaInference", help="(--modal) Modal class name")
     args = parser.parse_args()
 
+    try:
+        select = parse_page_spec(args.page_range)
+    except ValueError as exc:
+        parser.error(f"invalid --page-range: {exc}")
+
     if args.analyze:
         if not args.pdf:
             parser.error("--analyze requires a PDF path")
-        raise SystemExit(run_analyze(args.pdf, args.pages, args.out or "pages.json", args.vision_model))
+        raise SystemExit(run_analyze(args.pdf, args.pages, args.out or "pages.json",
+                                     args.vision_model, select=select, append=args.append))
     elif args.modal:
-        raise SystemExit(run_modal(args.pages_json, args.pages, args.out or "test_output", args.app, args.cls))
+        raise SystemExit(run_modal(args.pages_json, args.pages, args.out or "test_output",
+                                   args.app, args.cls, select=select))
     else:
         if not args.pdf:
             parser.error("a PDF path is required for WebSocket streaming mode")
