@@ -65,19 +65,21 @@ class StableAudioInference:
         from scipy.io import wavfile
         from stable_audio_tools.inference.generation import generate_diffusion_cond_inpaint
 
+        desired_samples = min(int(duration * self.sample_rate), self.sample_size)
         conditioning = [{"prompt": prompt, "seconds_total": duration}]
         output = generate_diffusion_cond_inpaint(
             self.model,
             steps=8,
             cfg_scale=1.0,
             conditioning=conditioning,
-            sample_size=self.sample_size,
+            sample_size=desired_samples,
             sampler_type="pingpong",
             device=self.device,
         )
         output = rearrange(output, "b d n -> d (b n)")
+        peak = torch.max(torch.abs(output))
         arr = (output.to(torch.float32)
-               .div(torch.max(torch.abs(output)))
+               .div(peak.clamp(min=1e-8))
                .clamp(-1, 1)
                .mul(32767)
                .to(torch.int16)

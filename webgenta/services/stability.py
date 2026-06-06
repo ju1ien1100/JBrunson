@@ -34,7 +34,8 @@ class StabilityService:
 
     async def handle(self, ws: "websockets.WebSocketServerProtocol", action: dict) -> None:
         if action.get("action") == "generate":
-            asyncio.create_task(self._generate(ws, action))
+            task = asyncio.create_task(self._generate(ws, action))
+            task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
 
     async def _generate(self, ws, action: dict) -> None:
         if self._modal is None:

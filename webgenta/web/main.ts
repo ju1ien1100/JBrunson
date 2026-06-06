@@ -325,7 +325,8 @@ stabilityBtn.addEventListener("click", () => {
 
   stabWs.onmessage = (e) => {
     if (e.data instanceof ArrayBuffer) {
-      // Raw WAV bytes — create a blob URL and hand to the audio player
+      // Raw WAV bytes — revoke the previous blob URL before creating a new one
+      if (stabilityAudio.src.startsWith("blob:")) URL.revokeObjectURL(stabilityAudio.src);
       const blob = new Blob([e.data], { type: "audio/wav" });
       const url = URL.createObjectURL(blob);
       stabilityAudio.src = url;

@@ -11,8 +11,10 @@ Usage:
   python ws_server.py [--host 0.0.0.0] [--port 8765] [--model mrt2_small] [--no-magenta]
 
 Environment variables (set in .env or shell before running):
-  SUNO_API_KEY       — Suno bearer token (sk_live_...)
-  STABILITY_API_KEY  — Stability.ai bearer token
+  SUNO_API_KEY  — Suno bearer token (sk_live_...)
+
+Modal secrets (configured via `modal secret create`):
+  huggingface   — HF_TOKEN for gated model access (needed by --modal-stability)
 """
 
 import os
