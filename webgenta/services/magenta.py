@@ -162,6 +162,7 @@ class MagentaService:
 
         state = None
         loop_num = 0
+        active_notes: dict[int, bool] = {}
 
         async def _render_and_stream():
             nonlocal state, loop_num
@@ -172,7 +173,7 @@ class MagentaService:
                 if self._use_modal:
                     audio = await _render_loop_modal(self._modal, style_bytes)
                 else:
-                    audio, state = await asyncio.get_event_loop().run_in_executor(
+                    audio, state = await asyncio.get_running_loop().run_in_executor(
                         None, _render_loop_local, self._system, style, state
                     )
 
@@ -209,7 +210,10 @@ class MagentaService:
                 elif a == "prompt":
                     new_prompt = event.get("text", "")
                     print(f"[magenta] prompt update: {new_prompt!r}", flush=True)
-                    style = self._system.embed_style(new_prompt)
+                    if self._use_modal:
+                        style_bytes = await self._modal.embed_style.remote.aio(new_prompt)
+                    else:
+                        style = self._system.embed_style(new_prompt)
                     state = None
                 elif a == "note_on":
                     pitch = int(event.get("pitch", 0)) & 0x7F

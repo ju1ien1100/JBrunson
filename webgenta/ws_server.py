@@ -25,7 +25,6 @@ import argparse
 import asyncio
 import json
 import logging
-import sys
 from pathlib import Path
 
 import numpy as np

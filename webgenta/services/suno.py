@@ -122,7 +122,10 @@ class SunoService:
                 await ws.send(msg(self.SERVICE, "error", message=str(e)))
                 return
 
-            job_id = data["id"]
+            job_id = data.get("id", "")
+            if not job_id:
+                await ws.send(msg(self.SERVICE, "error", message=f"Suno response missing 'id': {data}"))
+                return
             await ws.send(msg(self.SERVICE, "submitted", id=job_id))
 
             # Poll until complete or error
