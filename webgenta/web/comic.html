@@ -390,9 +390,10 @@
     let readerReady   = false;
     let selectedFile  = null;
 
-    // Page cache: Map<readerPageNum, {bg, melody, voice}>
+    // Page cache: Map<readerPageNum, {img, bg, melody, voice}>
     const pageCache = new Map();
     let _pendingUrls = { bg: null, melody: null, voice: null };
+    let _pendingImage = null; // page image data-URL for the page being received
 
     window.addEventListener("beforeunload", () => {
       pageCache.forEach(c => {
@@ -626,7 +627,8 @@
         currentPage = msg.page_number;
         totalPages  = msg.total;
         setPageCounter(currentPage, totalPages);
-        pageImg.src = `data:image/png;base64,${msg.image_b64}`;
+        _pendingImage = `data:image/png;base64,${msg.image_b64}`;
+        pageImg.src = _pendingImage;
         genBadge.classList.remove("visible");
         hasMelody = false;
         _pendingUrls = { bg: null, melody: null, voice: null };
@@ -638,8 +640,8 @@
         if (msg.track === "melody") hasMelody = true;
 
       } else if (msg.type === "tracks_end") {
-        // Cache and play
-        pageCache.set(currentPage, { ..._pendingUrls });
+        // Cache and play (include the page image so Back/Prev can restore it)
+        pageCache.set(currentPage, { ..._pendingUrls, img: _pendingImage });
         stopAll();
         if (_pendingUrls.bg)     bgAudio.src     = _pendingUrls.bg;
         if (_pendingUrls.melody) melodyAudio.src = _pendingUrls.melody;
@@ -692,8 +694,11 @@
 
     function serveCached(n) {
       const c = pageCache.get(n);
-      nextBtn.disabled = true;
       hasMelody = !!c.melody;
+      // Revisited page: enable Next by position (don't re-gate on the melody
+      // finishing — otherwise Next stays stuck when there's no melody track).
+      nextBtn.disabled = n >= totalPages;
+      if (c.img) pageImg.src = c.img;   // restore the page image (Back/Prev fix)
       stopAll();
       if (c.bg)     { bgAudio.src     = c.bg;     setTdot("bg-dot",     "ready"); }
       if (c.melody) { melodyAudio.src = c.melody; setTdot("melody-dot", "ready"); }
