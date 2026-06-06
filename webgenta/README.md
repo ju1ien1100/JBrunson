@@ -1,9 +1,10 @@
-# Webgenta — MRT2 Browser Streaming Demo
+# Webgenta
 
-Browser app that streams AI-generated music from Google DeepMind's
-[Magenta RealTime 2](https://github.com/magenta/magenta-realtime) model via WebSocket.
-Type a style prompt, hit Connect, and hear the model generate music conditioned on
-a built-in "Mary Had a Little Lamb" MIDI sequence.
+WebSocket orchestration server for AI-generated music, built on top of
+[Magenta RealTime 2](https://github.com/magenta/magenta-realtime) (MRT2).
+
+Type a style prompt in the browser, hit Connect, and hear the model generate
+music conditioned on a MIDI sequence — streamed in real time from a GPU in the cloud.
 
 ---
 
@@ -11,102 +12,123 @@ a built-in "Mary Had a Little Lamb" MIDI sequence.
 
 ```
 Browser (Vite + TypeScript)
-  ├── index.html / main.ts  — UI, WebSocket client, Web MIDI
+  ├── main.ts          — WebSocket client, Web MIDI forwarding
   ├── public/mrt2-worklet.js — AudioWorklet ring-buffer player
   └── AudioContext @ 48kHz → speakers
 
-Python server  (server.py)
-  ├── Loads MagentaRT2System (JAX, CPU)
-  ├── Renders Mary Had a Little Lamb offline in per-note batches
-  └── Streams pre-rendered float32 PCM over WebSocket
+ws_server.py  — WebSocket orchestration server
+  ├── magenta service  → Modal.com T4 GPU (MRT2 JAX inference)
+  ├── suno service     → Suno API  (vocal sound effects)
+  └── stability service → Stability.ai (background tracks)
+
+Modal.com  (modal_magenta.py)
+  ├── MagentaInference class  — GPU container, stays warm 5 min
+  ├── embed_style()  — text → 768-d style embedding
+  └── render()       — notes sequence → float32 PCM (stereo, 48kHz)
 ```
 
-Current mode: **offline render → stream**.
-The server renders a full pass of the MARY sequence (all notes as batched
-`generate()` calls), then streams the audio. Loops continuously.
-This avoids real-time CPU pressure and produces stutter-free playback.
+### Message protocol
+
+All WebSocket messages are JSON with a `service` field:
+
+```json
+// Client → Server
+{ "service": "magenta", "action": "start",   "prompt": "jazzy piano" }
+{ "service": "magenta", "action": "stop" }
+{ "service": "magenta", "action": "prompt",  "text": "new style" }
+{ "service": "magenta", "action": "note_on", "pitch": 64, "velocity": 80 }
+{ "service": "magenta", "action": "note_off","pitch": 64 }
+{ "service": "magenta", "action": "drum",    "velocity": 100 }
+
+// Server → Client (JSON)
+{ "service": "magenta", "event": "status", "state": "embedding" }
+{ "service": "magenta", "event": "ready",  "loop": 1, "duration_s": 42.3 }
+{ "service": "magenta", "event": "stopped" }
+{ "service": "magenta", "event": "error",  "message": "..." }
+
+// Server → Client (binary)
+<float32 PCM, stereo interleaved, 48kHz>
+```
 
 ---
 
 ## Prerequisites
 
-| Tool | Version |
-|------|---------|
-| Python | 3.10+ |
-| Node.js | 18+ |
-| Git | any |
+| Tool | Version | Notes |
+|------|---------|-------|
+| Python | 3.11+ | |
+| Node.js | 18+ | |
+| Modal account | free tier ok | modal.com |
+| Git | any | |
 
-Windows-specific requirement: **long paths must be enabled**.
-Run once as Administrator:
+**Windows only** — enable long paths once as Administrator:
 ```powershell
-Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name LongPathsEnabled -Value 1
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" `
+  -Name LongPathsEnabled -Value 1
 ```
 
 ---
 
-## One-Time Setup
+## Setup
 
-Use the provided setup script (see `setup.ps1`) or follow these steps manually.
-
-### 1. Clone magenta-realtime
+### 1. Clone repos
 
 ```powershell
 cd C:\Users\<you>\JBrunson
-git clone https://github.com/google-deepmind/magenta-realtime magenta-realtime
+git clone https://github.com/magenta/magenta-realtime magenta-realtime
+git clone https://github.com/yourorg/webgenta webgenta   # or use the existing folder
 ```
 
-### 2. Create and activate a Python venv
+### 2. Python environment
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
 
-### 3. Install magenta-realtime with JAX (CPU)
-
-```powershell
 pip install -e "magenta-realtime[jax]"
 pip install -e "magenta-realtime\magenta_rt\_vendor\sequence-layers"
-```
-
-### 4. Download model checkpoints
-
-```python
-# Run once in Python (venv active):
-from huggingface_hub import hf_hub_download
-import shutil, pathlib
-
-repo = "google/magenta-realtime-2"
-base = pathlib.Path.home() / "Documents/Magenta/magenta-rt-v2"
-
-# Checkpoint
-src = hf_hub_download(repo, "checkpoints/mrt2_small.safetensors")
-dst = base / "checkpoints/mrt2_small.safetensors"
-dst.parent.mkdir(parents=True, exist_ok=True)
-shutil.copy(src, dst)
-
-# MusicCoCa resources
-for f in ["text_encoder.tflite", "vocab.txt", "config.json"]:
-    src = hf_hub_download(repo, f"resources/musiccoca/{f}")
-    dst = base / "resources/musiccoca" / f
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(src, dst)
-
-# SpectroStream resources
-for f in ["config.json"]:
-    src = hf_hub_download(repo, f"resources/spectrostream/{f}")
-    dst = base / "resources/spectrostream" / f
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(src, dst)
-```
-
-### 5. Install webgenta Python deps
-
-```powershell
 pip install -r webgenta\requirements.txt
 ```
 
-### 6. Install web dependencies
+### 3. Modal setup (GPU inference)
+
+```powershell
+pip install modal
+python -m modal setup    # opens browser for OAuth
+```
+
+Upload model weights to Modal volume (one time — ~900 MB):
+
+```powershell
+modal volume put magenta-weights `
+  "C:\Users\<you>\Documents\Magenta\magenta-rt-v2" /magenta-rt-v2
+```
+
+> If you don't have the weights locally yet, run `mrt models init` inside the
+> magenta-realtime venv to download them first.
+
+Deploy the inference app:
+
+```powershell
+modal deploy webgenta\modal_magenta.py
+```
+
+Verify the GPU model loads:
+
+```powershell
+modal run webgenta\modal_magenta.py   # runs smoke_test → prints embedding shape
+```
+
+### 4. API keys (optional services)
+
+```powershell
+copy webgenta\.env.example webgenta\.env
+# Edit webgenta\.env and fill in:
+#   SUNO_API_KEY=sk_live_...
+#   STABILITY_API_KEY=...
+```
+
+### 5. Frontend dependencies
 
 ```powershell
 cd webgenta\web
@@ -118,66 +140,120 @@ cd ..\..
 
 ## Running
 
-**Terminal 1 — Python server:**
+**Terminal 1 — WebSocket server (Modal GPU backend):**
 ```powershell
-cd C:\Users\<you>\JBrunson
 .\.venv\Scripts\Activate.ps1
-python -u webgenta\server.py --model mrt2_small
+python webgenta\ws_server.py --modal
 ```
 
-Wait for:
-```
-Model ready! Starting WebSocket server...
-Listening on ws://0.0.0.0:8765 — open the browser app to connect
-Rendering loop 1...
-```
-Rendering takes ~30–60 s on CPU. Audio starts streaming once done.
+Flags:
+- `--modal` — use Modal T4 GPU for Magenta (default: local CPU)
+- `--no-magenta` — skip MRT2, run Suno + Stability only
+- `--port 8765` — change port (default 8765)
+- `--model mrt2_base` — use the larger model (local mode only)
 
 **Terminal 2 — Vite dev server:**
 ```powershell
-cd C:\Users\<you>\JBrunson\webgenta\web
+cd webgenta\web
 npm run dev
 ```
 
 Open `http://localhost:5173` in Chrome or Edge.
-Enter a style prompt (e.g. "jazzy piano"), click **Connect**.
+Enter a style prompt (e.g. `"ambient lo-fi piano"`), click **Connect**.
+
+First request cold-starts the Modal container (~15 s). Subsequent requests
+within 5 minutes use the warm container (~2–3 s render for a full loop).
 
 ---
 
-## Known Issues & Limitations
+## Development
 
-- **CPU-only inference is slow** — rendering one MARY loop (~20 s of audio) takes
-  30–60 s on a laptop CPU. A CUDA GPU reduces this to ~2–3 s.
-- **No real-time MIDI yet** — the server currently only plays the built-in MARY demo.
-  Real-time note input is wired on the client but the server's render loop would need
-  to be restructured to react to live MIDI events.
-- **Prompt changes reset model state** — changing the style prompt mid-session restarts
-  the model state, which may cause a brief musical discontinuity.
+### Run without Modal (local CPU, slow)
+
+```powershell
+python webgenta\ws_server.py
+```
+
+Renders on CPU — expect ~60 s per loop for `mrt2_small`. Good for testing
+the WebSocket protocol without burning Modal credits.
+
+### Run without Magenta (API services only)
+
+```powershell
+python webgenta\ws_server.py --no-magenta
+```
+
+Starts the server with only Suno and Stability services registered.
+Useful for testing those integrations without loading any ML model.
+
+### Re-deploy after code changes
+
+```powershell
+modal deploy webgenta\modal_magenta.py
+```
+
+Image is cached — only changed layers rebuild. Usually takes 5–10 s if only
+Python code changed.
+
+### Add a new service
+
+1. Create `webgenta/services/myservice.py` with a class that has
+   `async def handle(self, ws, message) -> None`
+2. Register it in `ws_server.py`:
+   ```python
+   from services.myservice import MyService
+   services["myservice"] = MyService()
+   ```
+3. Send messages from the browser with `{ "service": "myservice", ... }`
 
 ---
 
-## Planned Improvements
+## Project structure
 
-### Short-term (hackathon)
-- [ ] **GPU support** — pass `--model mrt2_base` and run on a CUDA machine for
-  real-time generation. The JAX backend auto-detects CUDA; just remove
-  `JAX_PLATFORMS=cpu` from server.py.
-- [ ] **Live MIDI input** — restructure generate loop to accept incoming note events
-  and blend them into the conditioning vector in real-time.
-- [ ] **Prompt UI** — style blending slider (interpolate between two style embeddings).
+```
+JBrunson/
+├── magenta-realtime/          Google DeepMind MRT2 repo (cloned)
+└── webgenta/
+    ├── ws_server.py           Entry point — WebSocket router
+    ├── modal_magenta.py       Modal GPU deployment (MRT2 inference)
+    ├── requirements.txt       Python dependencies
+    ├── .env.example           API key template
+    ├── services/
+    │   ├── __init__.py        msg() helper
+    │   ├── magenta.py         MRT2 music generation service
+    │   ├── suno.py            Suno API vocal SFX service
+    │   └── stability.py       Stability.ai background audio service
+    └── web/
+        ├── index.html         UI
+        ├── main.ts            WebSocket client + Web MIDI
+        ├── public/
+        │   └── mrt2-worklet.js  AudioWorklet ring-buffer player
+        ├── package.json
+        └── vite.config.ts
+```
 
-### Real-time path (post-hackathon)
-- [ ] **GPU server** — move Python inference to a cloud GPU (Lambda Labs, Modal, etc.)
-  and connect the browser over WSS.
-- [ ] **Speculative generation** — generate 2–3 frames ahead in parallel to absorb
-  network jitter while keeping note latency low.
-- [ ] **Adaptive buffer** — worklet reports fill level back to server; server speeds up
-  or slows down to maintain a target latency of ~200 ms.
-- [ ] **MIDI keyboard** — Web MIDI selector already in the UI; server-side handler
-  just needs to be re-enabled.
-- [ ] **Drum conditioning** — MIDI channel 10 events already parsed client-side;
-  expose a drum toggle in the UI.
-- [ ] **Style interpolation** — allow blending between two prompts over time using
-  `np.lerp` on the style embeddings.
-- [ ] **Export** — "Save as WAV" button that accumulates rendered PCM and triggers a
-  browser download.
+---
+
+## Troubleshooting
+
+**`ExecutionError: Function has not been hydrated`**
+The server is trying to call Modal without a deployed app.
+Run `modal deploy webgenta\modal_magenta.py` first.
+
+**`AsyncUsageWarning` / crash on connect**
+Modal `.remote()` called from async context. All Modal calls must use
+`.remote.aio()`. Check `services/magenta.py`.
+
+**No audio in browser**
+- Check browser console for AudioWorklet errors
+- Make sure `AudioContext` sampleRate is 48000 (matches server output)
+- Chrome requires a user gesture before creating AudioContext — clicking Connect is enough
+
+**Modal container cold-starting every time**
+`scaledown_window=300` keeps the container warm for 5 minutes after the last
+request. If you're seeing cold starts, the container idled out. First request
+always pays the ~15 s warmup cost.
+
+**`JAX_PLATFORMS=cpu` warning on Windows**
+Expected — set in `ws_server.py` before any JAX import to prevent crashes
+on machines without CUDA. Modal containers ignore it (they have CUDA JAX).
