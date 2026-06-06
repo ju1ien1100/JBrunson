@@ -380,9 +380,10 @@
     voiceAudio.volume = 1.0;
 
     // ── State ────────────────────────────────────────────────────────────────
-    let ws            = null;
-    let currentPage   = 1;
-    let totalPages    = 1;
+    let ws              = null;
+    let currentPage     = 1;
+    let totalPages      = 1;
+    let _pendingPageReq = null; // page number queued while WS is reconnecting
     let pendingTrack  = null;
     let pendingMime   = "audio/wav";
     let hasMelody     = false;
@@ -528,7 +529,14 @@
       ws = new WebSocket(WS_URL);
       ws.binaryType = "arraybuffer";
 
-      ws.onopen  = () => connError.style.display = "none";
+      ws.onopen = () => {
+        connError.style.display = "none";
+        if (_pendingPageReq !== null) {
+          const n = _pendingPageReq;
+          _pendingPageReq = null;
+          requestPage(n);
+        }
+      };
       ws.onerror = () => connError.style.display = "block";
       ws.onclose = () => {
         // Don't auto-reconnect during upload screen; only in progress/reader
@@ -554,6 +562,9 @@
           if (pdfPageList.length) setDotState(pdfPageList[0], "analyzed", "spin");
         } else if (s === "generating") {
           progressStatusText.textContent = "Generating audio tracks…";
+        } else if (s === "error") {
+          progressStatusText.textContent = "Error: " + (msg.message || "analysis failed");
+          progressStatusText.style.color = "var(--red)";
         } else if (s === "reader_ready" && !readerReady) {
           readerReady = true;
           readerBanner.classList.add("visible");
@@ -663,6 +674,13 @@
         serveCached(n);
         return;
       }
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        // WS is reconnecting — queue the request and show the badge
+        _pendingPageReq = n;
+        genBadge.classList.add("visible");
+        return;
+      }
+      _pendingPageReq = null;
       genBadge.classList.add("visible");
       nextBtn.disabled = true;
       hasMelody = false;

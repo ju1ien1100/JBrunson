@@ -95,6 +95,7 @@ _state: dict = {
     "magenta_wavs": {},
     "suno_wavs": {},
     "gen_tasks": [],
+    "pipeline_task": None,      # the _analyze_and_generate Task itself
     "progress": {},             # pdf_page_num -> {analyzed, stable, magenta, suno}
     "error": None,
 }
@@ -291,7 +292,16 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
     # Analyze pages one at a time; fire generation tasks immediately after each so
     # Modal GPU work overlaps with the remaining Claude analysis calls.
     for pnum in pdf_page_nums:
-        result = await loop.run_in_executor(None, _analyze_one, pnum)
+        try:
+            result = await loop.run_in_executor(None, _analyze_one, pnum)
+        except asyncio.CancelledError:
+            raise  # re-upload cancelled this task — exit cleanly
+        except Exception as exc:
+            print(f"[p{pnum}] analysis ERROR: {exc}", flush=True)
+            _state["status"] = "error"
+            _state["error"] = str(exc)
+            await _broadcast({"type": "status", "status": "error", "message": str(exc)})
+            return
         _state["page_data"][pnum] = result
         _state["progress"][pnum]["analyzed"] = True
         _state["pdf_page_list"] = sorted(_state["page_data"].keys())
@@ -405,7 +415,9 @@ async def handle_upload(request: web.Request) -> web.Response:
     if not selected:
         return web.json_response({"error": "No pages in selected range"}, status=400)
 
-    # Reset global state
+    # Cancel the previous pipeline (analysis coroutine + all gen tasks)
+    if _state.get("pipeline_task") and not _state["pipeline_task"].done():
+        _state["pipeline_task"].cancel()
     for task in _state.get("gen_tasks", []):
         task.cancel()
 
@@ -419,6 +431,7 @@ async def handle_upload(request: web.Request) -> web.Response:
         "magenta_wavs": {},
         "suno_wavs": {},
         "gen_tasks": [],
+        "pipeline_task": None,
         "progress": {
             pnum: {"analyzed": False, "stable": False, "magenta": False, "suno": False}
             for pnum in selected
@@ -426,7 +439,9 @@ async def handle_upload(request: web.Request) -> web.Response:
         "error": None,
     })
 
-    asyncio.create_task(_analyze_and_generate(selected))
+    pipeline = asyncio.create_task(_analyze_and_generate(selected))
+    pipeline.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
+    _state["pipeline_task"] = pipeline
 
     return web.json_response({
         "total_pages": total,
