@@ -1,9 +1,8 @@
 /**
  * Webgenta — MRT2 browser streaming client.
  *
- * Connects to the Python WebSocket server, sends a text prompt,
- * streams PCM audio through an AudioWorkletNode, and forwards
- * Web MIDI input as conditioning events.
+ * Connects to ws_server.py, sends { service, action, ... } JSON messages,
+ * receives JSON events + binary PCM chunks, and plays audio via AudioWorklet.
  */
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -27,18 +26,50 @@ const ctx2d = canvas.getContext("2d")!;
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
-type Status = "idle" | "connecting" | "streaming" | "error";
+type Status = "idle" | "connecting" | "embedding" | "streaming" | "error";
 
 function setStatus(s: Status, detail = "") {
   statusEl.dataset.status = s;
   const labels: Record<Status, string> = {
     idle: "Idle",
     connecting: "Connecting…",
+    embedding: "Embedding prompt…",
     streaming: "Streaming",
     error: `Error${detail ? ": " + detail : ""}`,
   };
   statusEl.textContent = labels[s];
-  connectBtn.textContent = s === "streaming" ? "Disconnect" : "Connect";
+  connectBtn.textContent = s === "streaming" || s === "embedding" ? "Disconnect" : "Connect";
+}
+
+// ─── Server message helpers ──────────────────────────────────────────────────
+
+function send(action: string, payload: Record<string, unknown> = {}) {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ service: "magenta", action, ...payload }));
+  }
+}
+
+function handleServerMessage(data: unknown) {
+  if (!(data instanceof ArrayBuffer)) return;
+  workletNode?.port.postMessage(new Float32Array(data));
+}
+
+function handleServerEvent(msg: Record<string, unknown>) {
+  const event = msg.event as string;
+  if (event === "status") {
+    const state = msg.state as string;
+    if (state === "embedding" || state === "rendering") setStatus("embedding");
+  } else if (event === "ready") {
+    setStatus("streaming");
+    const loop = msg.loop as number;
+    const dur = msg.duration_s as number;
+    console.log(`[magenta] loop ${loop} ready — ${dur.toFixed(1)}s of audio`);
+  } else if (event === "stopped") {
+    teardown();
+  } else if (event === "error") {
+    setStatus("error", msg.message as string);
+    teardown();
+  }
 }
 
 // ─── MIDI ────────────────────────────────────────────────────────────────────
@@ -78,20 +109,18 @@ function bindMidiInput() {
 midiSelect.addEventListener("change", bindMidiInput);
 
 function onMidiMessage(e: MIDIMessageEvent) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const [status, pitch, velocity] = e.data;
   const type = status & 0xf0;
+  const isDrum = (status & 0x0f) === 9;
+
   if (type === 0x90 && velocity > 0) {
-    // Distinguish drums: MIDI channel 10 (status & 0x0f === 9)
-    if ((status & 0x0f) === 9) {
-      ws.send(JSON.stringify({ type: "drum", velocity }));
+    if (isDrum) {
+      send("drum", { velocity });
     } else {
-      ws.send(JSON.stringify({ type: "noteon", pitch, velocity }));
+      send("note_on", { pitch, velocity });
     }
   } else if (type === 0x80 || (type === 0x90 && velocity === 0)) {
-    if ((status & 0x0f) !== 9) {
-      ws.send(JSON.stringify({ type: "noteoff", pitch }));
-    }
+    if (!isDrum) send("note_off", { pitch });
   }
 }
 
@@ -115,14 +144,21 @@ async function initAudio(serverUrl: string, prompt: string) {
   ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
-    ws!.send(prompt);
-    setStatus("streaming");
+    // New protocol: start the Magenta service with a prompt
+    send("start", { prompt });
+    setStatus("embedding");
     startViz();
   };
 
   ws.onmessage = (e) => {
-    if (workletNode && e.data instanceof ArrayBuffer) {
-      workletNode.port.postMessage(new Float32Array(e.data));
+    if (e.data instanceof ArrayBuffer) {
+      handleServerMessage(e.data);
+    } else {
+      try {
+        handleServerEvent(JSON.parse(e.data as string));
+      } catch {
+        // ignore malformed
+      }
     }
   };
 
@@ -166,11 +202,9 @@ connectBtn.addEventListener("click", async () => {
   }
 });
 
-// Allow updating the prompt mid-session
+// Update style prompt mid-session
 promptInput.addEventListener("change", () => {
-  if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "prompt", text: promptInput.value.trim() }));
-  }
+  send("prompt", { text: promptInput.value.trim() });
 });
 
 // ─── Visualizer ──────────────────────────────────────────────────────────────
