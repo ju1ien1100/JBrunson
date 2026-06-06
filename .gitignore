@@ -1,0 +1,34 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+web/node_modules/
+
+# Model weights (too large for git)
+*.safetensors
+*.tflite
+*.bin
+*.ckpt
+*.onnx
+
+# Vite build output
+dist/
+
+# Logs / debug
+*.log
+debug_*.py
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
