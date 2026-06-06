@@ -71,11 +71,17 @@ FIRST_BATCH = 3  # pages needed before reader unlocks; rest generate in backgrou
 VISION_SYSTEM = (
     "You score a single comic/manga/book page for a three-layer audio engine. "
     "Look at the art and any text, then produce all four fields:\n"
+    "READING ORDER: First infer the layout direction. Manga and Japanese comics "
+    "are read RIGHT-TO-LEFT, top-to-bottom — start at the top-right panel/bubble "
+    "and move leftward, then down. Western comics are read left-to-right. Use the "
+    "art, panel layout, and language to decide, and transcribe panels and speech "
+    "bubbles in that correct reading order.\n"
     "stable_audio_prompt: Rich music description for a background track (genre, "
     "instrumentation, mood). Under 200 characters.\n"
     "magenta_mood: Single mood from the allowed set for the melody overlay.\n"
-    "suno_lyrics: Dialogue extracted verbatim from speech bubbles, newline-separated. "
-    "Empty string if no readable dialogue.\n"
+    "suno_lyrics: Dialogue extracted verbatim from speech bubbles, in reading "
+    "order, newline-separated. Preserve the original language. Empty string if no "
+    "readable dialogue.\n"
     "reason: Brief justification."
 )
 MOODS = ("calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral")
@@ -116,6 +122,35 @@ def _pcm32_to_wav(pcm_bytes: bytes) -> bytes:
         w.setframerate(MAGENTA_SAMPLE_RATE)
         w.writeframes(pcm_i16.tobytes())
     return buf.getvalue()
+
+
+def _to_mp3(audio_bytes: bytes) -> bytes:
+    """Transcode arbitrary audio bytes to MP3 (browser-playable).
+
+    Suno returns Opus-in-MP4, which browsers' <audio> cannot decode, so the
+    voice track is silent. Normalize to MP3 so the 'audio/mpeg' track header is
+    accurate. Uses the static ffmpeg from imageio-ffmpeg (no system ffmpeg).
+    Blocking — call via run_in_executor from async code.
+
+    FUTURE SCOPE — make this edge-friendly: spawning a bundled ffmpeg per clip
+    is heavy for edge/mobile/serverless. Options: (1) decode client-side via a
+    WASM/WebCodecs Opus decoder (no server transcode); (2) request a web-native
+    format (AAC/MP3) from Suno up front; (3) chunked stream-transcode instead
+    of buffering; (4) a pure-Python/WASM path with no native ffmpeg dependency.
+    """
+    import subprocess
+
+    import imageio_ffmpeg
+
+    ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+    proc = subprocess.run(
+        [ffmpeg, "-loglevel", "error", "-i", "pipe:0",
+         "-f", "mp3", "-c:a", "libmp3lame", "-b:a", "128k", "pipe:1"],
+        input=audio_bytes, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        raise RuntimeError(f"ffmpeg transcode failed: {proc.stderr.decode()[:300]}")
+    return proc.stdout
 
 
 # ── Progress broadcast ────────────────────────────────────────────────────────
@@ -218,8 +253,16 @@ async def _gen_suno(pdf_n: int) -> None:
 
             if audio_url:
                 async with session.get(audio_url) as r:
-                    _state["suno_wavs"][pdf_n] = await r.read()
-                print(f"[p{pdf_n}] suno done ({len(_state['suno_wavs'][pdf_n])//1024} KB)", flush=True)
+                    raw_audio = await r.read()
+                # Suno returns Opus-in-MP4 (mislabeled audio/mpeg); browsers can't
+                # play it. Transcode to real MP3 so the voice track is audible.
+                try:
+                    mp3 = await loop.run_in_executor(None, _to_mp3, raw_audio)
+                    _state["suno_wavs"][pdf_n] = mp3
+                    print(f"[p{pdf_n}] suno done ({len(mp3)//1024} KB MP3)", flush=True)
+                except Exception as e:
+                    print(f"[p{pdf_n}] suno transcode ERROR: {e}", flush=True)
+                    _state["suno_wavs"][pdf_n] = None
             else:
                 print(f"[p{pdf_n}] suno: timed out", flush=True)
                 _state["suno_wavs"][pdf_n] = None

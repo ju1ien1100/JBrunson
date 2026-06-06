@@ -9,3 +9,6 @@ anthropic
 
 # Modal GPU (model_server.py): needs Modal auth + deployed apps
 modal
+
+# voice track: transcode Suno's Opus-in-MP4 -> browser-playable MP3 (static ffmpeg)
+imageio-ffmpeg
