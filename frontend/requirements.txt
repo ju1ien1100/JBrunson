@@ -1,11 +1,11 @@
 # core
 pymupdf
-websockets
+aiohttp
 numpy
+pydantic
 
-# stage 1 — analyze (pdf_reader.py --analyze): needs ANTHROPIC_API_KEY
+# vision analysis (pdf_reader.py --analyze + model_server.py): needs ANTHROPIC_API_KEY
 anthropic
 
-# stage 2 — serve (model_server.py): needs Modal auth + deployed apps + SUNO_API_KEY
+# Modal GPU (model_server.py): needs Modal auth + deployed apps
 modal
-aiohttp
