@@ -4,23 +4,26 @@
     {
       "page_number": 7,
       "total_pages": 11,
-      "mood": "mysterious",
-      "style_prompt": "dark ambient orchestral with eerie strings and subtle percussion, tense and enigmatic",
-      "reason": "A nervous boy clutching an object stands beside a looming panda creature against a shadowed brick wall, creating an unsettling, mysterious atmosphere."
+      "stable_audio_prompt": "Dark electronic synth with eerie ambiance, minor key, sparse percussion, unsettling and surreal",
+      "magenta_mood": "mysterious",
+      "suno_lyrics": "",
+      "reason": "The manga panel shows a character confronted by a menacing panda mask figure in a gritty urban setting. The stark black-and-white art, confined space, and the character's alarmed expression suggest tension and mystery. The surreal nature of the panda mask creates an eerie, otherworldly atmosphere. No dialogue is visible, so lyrics are empty."
     },
     {
       "page_number": 8,
       "total_pages": 11,
-      "mood": "mysterious",
-      "style_prompt": "dark eerie orchestral strings with subtle percussion, ominous and suspenseful supernatural atmosphere",
-      "reason": "Shadowy scene with a looming cursed monster mask and confident armed characters introduces a dark supernatural chapter, evoking mystery and dread."
+      "stable_audio_prompt": "Dark orchestral tension with eerie strings, minor key, slow ominous build with sinister undertones",
+      "magenta_mood": "mysterious",
+      "suno_lyrics": "",
+      "reason": "Chapter title 'The Cursed Child' combined with dark monochromatic art, shadowy atmosphere, and menacing supernatural creature in background creates a mysterious and ominous tone. No dialogue present on page. Music should reflect supernatural dread and dark fantasy setting."
     },
     {
       "page_number": 9,
       "total_pages": 11,
-      "mood": "tense",
-      "style_prompt": "dark suspenseful orchestral strings, low tremolo, building unease and menacing tension",
-      "reason": "Confrontational dialogue with threats of violence ('I might just end up killing you') and an unsettling, menacing expression create a tense, hostile standoff."
+      "stable_audio_prompt": "tense dramatic string ensemble, minor key, building intensity, psychological thriller atmosphere",
+      "magenta_mood": "tense",
+      "suno_lyrics": "C'mon, man. Don't be mean.\nStay away...\nIt's been a while, Okkotsu.\nYou can't.\nTry to understand how I feel!\nDo you know how much I want to punch you?\nStop it.\n...I might just end up killing you.\nWith you tempting me like that...",
+      "reason": "The page depicts an intense emotional confrontation with mounting psychological tension. The dialogue shows escalating frustration and dark ideation. Tense mood with dramatic minor key strings captures the volatile interpersonal dynamics and internal conflict building throughout the sequence."
     }
   ]
 }

@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Comic Reader</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0a;
+      color: #e5e5e5;
+      font-family: system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 1.5rem 1rem 2rem;
+      gap: 1.25rem;
+    }
+
+    h1 { font-size: 1.1rem; color: #a78bfa; letter-spacing: .05em; }
+
+    /* Page display */
+    #page-wrap {
+      position: relative;
+      max-width: 900px;
+      width: 100%;
+    }
+
+    #page-img {
+      display: block;
+      width: 100%;
+      border-radius: 6px;
+      box-shadow: 0 0 32px #0008;
+      min-height: 200px;
+      background: #1a1a1a;
+    }
+
+    #loading-badge {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: #7c3aed;
+      color: #fff;
+      font-size: .75rem;
+      font-weight: 600;
+      padding: .3rem .7rem;
+      border-radius: 999px;
+      opacity: 0;
+      transition: opacity .2s;
+      pointer-events: none;
+    }
+    #loading-badge.visible { opacity: 1; }
+
+    /* Nav */
+    #nav {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    button {
+      background: #1e1e2e;
+      border: 1px solid #3f3f6e;
+      color: #e5e5e5;
+      font-size: .9rem;
+      padding: .5rem 1.2rem;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    button:hover:not(:disabled) { background: #2d2d4e; }
+    button:disabled { opacity: .35; cursor: not-allowed; }
+
+    #page-counter { font-size: .9rem; color: #a78bfa; min-width: 80px; text-align: center; }
+
+    /* Audio status strip */
+    #audio-strip {
+      display: flex;
+      gap: 1.2rem;
+      font-size: .75rem;
+      color: #888;
+    }
+
+    .track-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: .4em;
+      background: #333;
+      vertical-align: middle;
+      transition: background .3s;
+    }
+    .track-dot.ready   { background: #22c55e; }
+    .track-dot.playing { background: #7c3aed; animation: pulse 1s infinite; }
+    .track-dot.empty   { background: #444; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .35; }
+    }
+
+    /* Connection error */
+    #conn-error {
+      display: none;
+      color: #f87171;
+      font-size: .85rem;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Comic Reader</h1>
+
+  <div id="page-wrap">
+    <img id="page-img" src="" alt="Comic page" />
+    <div id="loading-badge">Generating soundtrack…</div>
+  </div>
+
+  <div id="nav">
+    <button id="prev-btn" disabled>← Prev</button>
+    <span id="page-counter">—</span>
+    <button id="next-btn" disabled>Next →</button>
+  </div>
+
+  <div id="audio-strip">
+    <span><span class="track-dot" id="bg-dot"></span>Background</span>
+    <span><span class="track-dot" id="melody-dot"></span>Melody</span>
+    <span><span class="track-dot" id="voice-dot"></span>Voice</span>
+  </div>
+
+  <p id="conn-error">Cannot connect to ws://localhost:8766/ — is model_server.py running?</p>
+
+  <!-- Three audio elements; volumes set in JS -->
+  <audio id="bg-audio" loop></audio>
+  <audio id="melody-audio"></audio>
+  <audio id="voice-audio"></audio>
+
+  <script>
+    const WS_URL = "ws://localhost:8766/";
+
+    // ── DOM ──────────────────────────────────────────────────────────────────
+    const pageImg      = document.getElementById("page-img");
+    const loadingBadge = document.getElementById("loading-badge");
+    const pageCounter  = document.getElementById("page-counter");
+    const nextBtn      = document.getElementById("next-btn");
+    const prevBtn      = document.getElementById("prev-btn");
+    const connError    = document.getElementById("conn-error");
+
+    const bgAudio     = document.getElementById("bg-audio");
+    const melodyAudio = document.getElementById("melody-audio");
+    const voiceAudio  = document.getElementById("voice-audio");
+    bgAudio.volume = 0.3;
+    melodyAudio.volume = 0.6;
+    voiceAudio.volume = 1.0;
+
+    const bgDot     = document.getElementById("bg-dot");
+    const melodyDot = document.getElementById("melody-dot");
+    const voiceDot  = document.getElementById("voice-dot");
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    let ws = null;
+    let currentPage = 1;
+    let totalPages  = 1;
+    let pendingTrack = null;
+    let pendingMime  = "audio/wav";
+    let hasMelody    = false;
+
+    // Browser-side cache: Map<readerPageNum, {bg, melody, voice}>
+    // Values are blob URLs (or null for absent tracks).
+    const pageCache = new Map();
+
+    // Temp accumulator while receiving tracks for current page
+    let _pending = { bg: null, melody: null, voice: null };
+
+    // Revoke all blob URLs on unload to avoid leaks
+    window.addEventListener("beforeunload", () => {
+      pageCache.forEach(urls => {
+        if (urls.bg)     URL.revokeObjectURL(urls.bg);
+        if (urls.melody) URL.revokeObjectURL(urls.melody);
+        if (urls.voice)  URL.revokeObjectURL(urls.voice);
+      });
+    });
+
+    // ── Dot helpers ───────────────────────────────────────────────────────────
+    function resetDots() {
+      [bgDot, melodyDot, voiceDot].forEach(d => {
+        d.className = "track-dot";
+      });
+    }
+
+    function setDot(track, state) {
+      const map = { background: bgDot, melody: melodyDot, voice: voiceDot };
+      const dot = map[track];
+      if (dot) dot.className = `track-dot ${state}`;
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────────────
+    function connect() {
+      ws = new WebSocket(WS_URL);
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = () => {
+        connError.style.display = "none";
+        requestPage(currentPage);
+      };
+
+      ws.onmessage = (e) => {
+        if (typeof e.data === "string") {
+          handleJson(JSON.parse(e.data));
+        } else {
+          handleBinary(e.data);
+        }
+      };
+
+      ws.onerror = () => {
+        connError.style.display = "block";
+      };
+
+      ws.onclose = () => {
+        // Retry after 3s so a server restart auto-reconnects
+        setTimeout(connect, 3000);
+      };
+    }
+
+    // ── Page requests ─────────────────────────────────────────────────────────
+    function requestPage(n) {
+      // Serve from browser cache if available
+      if (pageCache.has(n)) {
+        serveCached(n);
+        return;
+      }
+
+      // Show loading badge, lock Next, reset dots
+      loadingBadge.classList.add("visible");
+      nextBtn.disabled = true;
+      hasMelody = false;
+      pendingTrack = null;
+      _pending = { bg: null, melody: null, voice: null };
+      resetDots();
+
+      ws.send(JSON.stringify({ type: "ready", page: n }));
+    }
+
+    function serveCached(n) {
+      const c = pageCache.get(n);
+      nextBtn.disabled = true;
+      hasMelody = !!c.melody;
+
+      stopAll();
+      if (c.bg)     { bgAudio.src     = c.bg;     setDot("background", "ready"); }
+      if (c.melody) { melodyAudio.src = c.melody; setDot("melody",     "ready"); }
+      if (c.voice)  { voiceAudio.src  = c.voice;  setDot("voice",      "ready"); }
+      if (!c.bg && !c.melody && !c.voice) {
+        // Nothing to play on this page — unlock Next
+        setPageCounter(n, totalPages);
+        nextBtn.disabled = n >= totalPages;
+        return;
+      }
+      setPageCounter(n, totalPages);
+      playAll(c);
+    }
+
+    // ── Message handlers ──────────────────────────────────────────────────────
+    function handleJson(msg) {
+      if (msg.type === "page") {
+        currentPage = msg.page_number;
+        totalPages  = msg.total;
+        setPageCounter(currentPage, totalPages);
+        pageImg.src = `data:image/png;base64,${msg.image_b64}`;
+        loadingBadge.classList.remove("visible");
+        hasMelody = false;
+        _pending  = { bg: null, melody: null, voice: null };
+        resetDots();
+
+      } else if (msg.type === "track_header") {
+        pendingTrack = msg.track;
+        pendingMime  = msg.mime || (msg.track === "voice" ? "audio/mpeg" : "audio/wav");
+        if (msg.track === "melody") hasMelody = true;
+        setDot(msg.track, "ready");
+
+      } else if (msg.type === "tracks_end") {
+        // Commit to cache
+        pageCache.set(currentPage, { ..._pending });
+
+        // Wire audio elements
+        stopAll();
+        if (_pending.bg)     bgAudio.src     = _pending.bg;
+        if (_pending.melody) melodyAudio.src = _pending.melody;
+        if (_pending.voice)  voiceAudio.src  = _pending.voice;
+
+        playAll(_pending);
+
+        // If there's no melody, unlock Next immediately
+        if (!hasMelody) {
+          nextBtn.disabled = currentPage >= totalPages;
+        }
+
+      } else if (msg.type === "error") {
+        console.error("Server error:", msg.message);
+        loadingBadge.classList.remove("visible");
+      }
+    }
+
+    function handleBinary(data) {
+      if (!pendingTrack) return;
+      const blob = new Blob([data], { type: pendingMime });
+      const url  = URL.createObjectURL(blob);
+
+      if      (pendingTrack === "background") _pending.bg     = url;
+      else if (pendingTrack === "melody")     _pending.melody = url;
+      else if (pendingTrack === "voice")      _pending.voice  = url;
+
+      pendingTrack = null;
+    }
+
+    // ── Playback ──────────────────────────────────────────────────────────────
+    function stopAll() {
+      [bgAudio, melodyAudio, voiceAudio].forEach(a => {
+        a.pause();
+        a.currentTime = 0;
+      });
+    }
+
+    function playAll(urls) {
+      if (urls.bg)     { bgAudio.play().catch(() => {});     setDot("background", "playing"); }
+      if (urls.melody) { melodyAudio.play().catch(() => {}); setDot("melody",     "playing"); }
+      if (urls.voice)  { voiceAudio.play().catch(() => {});  setDot("voice",      "playing"); }
+      if (!urls.bg && !urls.melody && !urls.voice) {
+        setDot("background", "empty");
+        setDot("melody",     "empty");
+        setDot("voice",      "empty");
+      }
+    }
+
+    // Melody ended → unlock Next button
+    melodyAudio.addEventListener("ended", () => {
+      setDot("melody", "ready");
+      nextBtn.disabled = currentPage >= totalPages;
+    });
+
+    bgAudio.addEventListener("play",  () => setDot("background", "playing"));
+    bgAudio.addEventListener("pause", () => setDot("background", "ready"));
+    voiceAudio.addEventListener("ended", () => setDot("voice", "ready"));
+
+    // ── Navigation ────────────────────────────────────────────────────────────
+    function setPageCounter(n, total) {
+      pageCounter.textContent = `${n} / ${total}`;
+      prevBtn.disabled = n <= 1;
+    }
+
+    nextBtn.addEventListener("click", () => {
+      if (currentPage < totalPages) {
+        currentPage++;
+        requestPage(currentPage);
+      }
+    });
+
+    prevBtn.addEventListener("click", () => {
+      if (currentPage > 1) {
+        currentPage--;
+        requestPage(currentPage);
+      }
+    });
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    connect();
+  </script>
+</body>
+</html>
