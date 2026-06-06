@@ -32,7 +32,8 @@ if TYPE_CHECKING:
     import websockets
 
 STABILITY_BASE = "https://api.stability.ai"
-POLL_INTERVAL = 4.0
+POLL_INTERVAL = 4.0    # seconds between status polls
+POLL_TIMEOUT  = 180.0  # give up after 3 minutes
 
 
 class StabilityService:
@@ -83,9 +84,15 @@ class StabilityService:
                 return
 
             job_id = data.get("id", "")
+            if not job_id:
+                await ws.send(msg(self.SERVICE, "error", message=f"Stability response missing 'id': {data}"))
+                return
             await ws.send(msg(self.SERVICE, "submitted", id=job_id))
 
-            while True:
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + POLL_TIMEOUT
+            state = "unknown"
+            while loop.time() < deadline:
                 await asyncio.sleep(POLL_INTERVAL)
                 try:
                     async with session.get(
@@ -114,3 +121,6 @@ class StabilityService:
                         message=status_data.get("message", "unknown error"),
                     ))
                     return
+
+            await ws.send(msg(self.SERVICE, "error", id=job_id,
+                              message=f"Timed out after {int(POLL_TIMEOUT)}s — job still in state '{state}'"))

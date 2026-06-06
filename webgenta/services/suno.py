@@ -45,7 +45,8 @@ if TYPE_CHECKING:
     import websockets
 
 SUNO_BASE = "https://api.suno.com"
-POLL_INTERVAL = 3.0  # seconds between status polls
+POLL_INTERVAL = 3.0   # seconds between status polls
+POLL_TIMEOUT  = 300.0 # give up after 5 minutes
 
 
 class SunoService:
@@ -128,8 +129,10 @@ class SunoService:
                 return
             await ws.send(msg(self.SERVICE, "submitted", id=job_id))
 
-            # Poll until complete or error
-            while True:
+            # Poll until complete, error, or timeout
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + POLL_TIMEOUT
+            while loop.time() < deadline:
                 await asyncio.sleep(POLL_INTERVAL)
                 try:
                     async with session.get(
@@ -159,3 +162,6 @@ class SunoService:
                         message=status_data.get("error", "unknown error"),
                     ))
                     return
+
+            await ws.send(msg(self.SERVICE, "error", id=job_id,
+                              message=f"Timed out after {int(POLL_TIMEOUT)}s — job still in state '{state}'"))
