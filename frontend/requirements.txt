@@ -1,2 +1,10 @@
+# Core / WebSocket streaming mode
 pymupdf
 websockets
+
+# Stage 1 — vision analysis (pdf_reader.py --analyze): needs ANTHROPIC_API_KEY
+anthropic
+
+# Stage 2 — Modal render (pdf_reader.py --modal): needs Modal auth + deployed app
+modal
+numpy
