@@ -36,4 +36,7 @@ Thumbs.db
 # Downloaded webtoon/comic content (copyrighted — keep out of git)
 data/files/
 
+# Vendored kumiko panel-detection lib (cloned locally, not part of this repo)
+frontend/kumiko/
+
 .drake
