@@ -1052,9 +1052,9 @@ registerProcessor('mrt2-processor', MRT2Processor);
       if (mHeldNotes.has(n)) return;
       mHeldNotes.add(n);
       mKeyboard.querySelectorAll(`[data-note="${n}"]`).forEach(e => e.classList.add('active'));
+      if (!mConnected) mPlayBtn.click();
       mSend('note_on', { pitch: n, velocity: 100 });
       mUpdateGain();
-      if (!mConnected) mPlayBtn.click();
     }
     function mNoteOff(n) {
       mHeldNotes.delete(n);
@@ -1205,6 +1205,7 @@ registerProcessor('mrt2-processor', MRT2Processor);
         mConnected = true;
         mSend('start', { prompt: mCurrentPrompt });
         mSendConfig();
+        mHeldNotes.forEach(n => mSend('note_on', { pitch: n, velocity: 100 }));
         mPlayBtn.textContent = '■ Stop';
         mSetStatus('connecting', 'Embedding…');
       };
@@ -1251,7 +1252,6 @@ registerProcessor('mrt2-processor', MRT2Processor);
 
     // Init
     mPopulatePresets();
-    mBuildKeyboard();
     mUpdateOctave();
     mInitMidi();
   </script>
