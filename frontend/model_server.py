@@ -43,6 +43,7 @@ import numpy as np
 from aiohttp import web
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "kumiko"))  # kumiko + its lib/ subpackage
 from midi_library import melody_for_mood  # noqa: E402
 
 # Load .env so API keys are available regardless of how the script was launched
@@ -66,12 +67,11 @@ ANIME_VOICE_STYLE = (
     "spoken word, solo, voice only, no instruments, no background music, no beat, "
     "spoken word, anime voice, clear speech, dry vocal"
 )
-# Suno preset voice IDs (only these three are supported)
+# Suno preset voice IDs (only these two are supported; kid voice removed)
 VOICE_FEMALE  = "5b915c6d-8d96-416c-9755-eba65868cfef"  # female voice
-VOICE_KID     = "c036ce3a-55e4-4690-9b8d-4516b37a96d5"  # weird kid voice
 VOICE_MALE    = "27f5465b-73c3-4134-b11e-70b0bd571c6c"  # low male voice
 VOICE_DEFAULT = VOICE_FEMALE
-_VALID_VOICE_IDS = {VOICE_FEMALE, VOICE_KID, VOICE_MALE}
+_VALID_VOICE_IDS = {VOICE_FEMALE, VOICE_MALE}
 VISION_MODEL = "claude-haiku-4-5"
 PANEL_VISION_MODEL = "claude-sonnet-4-6"  # higher-capability model for panel boundary detection
 FIRST_BATCH = 3  # pages needed before reader unlocks; rest generate in background
@@ -91,35 +91,85 @@ VISION_SYSTEM = (
     "readable dialogue.\n"
     "suno_voice_id: Choose the voice that best matches the dominant speaking "
     "character on this panel. Options:\n"
-    f"  {VOICE_FEMALE} — female voice (default for women, girls, feminine characters)\n"
-    f"  {VOICE_KID}    — weird kid voice (children, comic-relief, young/quirky characters)\n"
+    f"  {VOICE_FEMALE} — female voice (women, girls, feminine or neutral characters)\n"
     f"  {VOICE_MALE}   — low male voice (men, older characters, deep/authoritative voices)\n"
     "Pick whichever fits the speaker. If there is no dialogue, still return a voice_id.\n"
     "reason: Brief justification."
 )
 MOODS = ("calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral")
 
+_GRID = 10  # virtual grid size for panel coordinate encoding
 PANEL_SYSTEM = (
-    "You are a comic/manga panel detector. Look at one page image and find every "
-    "distinct panel (a framed/bordered illustration cell, or for vertical webtoons, "
-    "each block separated by gaps). Read manga/Japanese RIGHT-TO-LEFT top-to-bottom, "
-    "Western comics left-to-right, webtoon strips top-to-bottom. Return panel_count "
-    "and one box per panel IN READING ORDER. Boxes are [x0,y0,x1,y1] as fractions of "
-    "width/height in [0,1]. Ignore margins, gutters, logos, and page numbers."
+    f"You are a comic/manga panel detector. Imagine the page is overlaid with a "
+    f"{_GRID}×{_GRID} grid: columns 1–{_GRID} left-to-right, rows 1–{_GRID} top-to-bottom.\n\n"
+    "First decide:\n"
+    "  • Reading direction: manga/Japanese = RIGHT-TO-LEFT top-to-bottom; "
+    "Western comics = LEFT-TO-RIGHT top-to-bottom; webtoon = TOP-TO-BOTTOM.\n"
+    "  • Panel boundaries: use visible borders/gutters when present; when absent "
+    "(dark background, borderless panels) use content grouping — each distinct "
+    "scene or narrative beat is one panel.\n\n"
+    "Then for each panel output (in reading order):\n"
+    f"  col_start, row_start — grid cell of the panel's TOP-LEFT corner (1–{_GRID})\n"
+    f"  col_end,   row_end   — grid cell of the panel's BOTTOM-RIGHT corner (1–{_GRID}, "
+    "must be ≥ the start values)\n\n"
+    "Count only main story panels. Ignore page margins, gutters, logos, and page numbers."
 )
 
 
+def _detect_panels_kumiko(page_png: bytes) -> list[list[float]]:
+    """CV-based panel detection using kumiko. Returns [] on failure or poor results."""
+    import os
+    import tempfile
+
+    tmp_path = None
+    try:
+        from lib.page import Page  # kumiko's lib.page (on sys.path via kumiko/)
+
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(page_png)
+            tmp_path = f.name
+
+        page = Page(tmp_path, numbering="ltr")
+        info = page.get_infos()
+        img_w, img_h = info["size"]
+        boxes = []
+        for x, y, pw, ph in info["panels"]:
+            x0 = x / img_w;  y0 = y / img_h
+            x1 = (x + pw) / img_w;  y1 = (y + ph) / img_h
+            if x1 - x0 > 0.02 and y1 - y0 > 0.02:
+                boxes.append([x0, y0, x1, y1])
+        print(f"[kumiko] detected {len(boxes)} panels", flush=True)
+        return boxes
+    except Exception as e:
+        print(f"[kumiko] failed: {e}", flush=True)
+        return []
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+
+
 def _detect_panels(page_png: bytes) -> list[list[float]]:
-    """Claude-vision panel detection -> list of [x0,y0,x1,y1] boxes in reading order.
+    """Panel detection: kumiko CV first, Claude grid fallback.
 
     Falls back to a single whole-page 'panel' if nothing is detected.
     """
+    boxes = _detect_panels_kumiko(page_png)
+    # Trust kumiko if it found ≥2 panels; otherwise fall back to Claude
+    if len(boxes) >= 2:
+        return boxes
+    print("[kumiko] too few panels — falling back to Claude grid detection", flush=True)
+
     import anthropic
     from pydantic import BaseModel
 
+    G = _GRID
+
     class _Panel(BaseModel):
         order: int
-        box: list[float]
+        col_start: int
+        row_start: int
+        col_end: int
+        row_end: int
 
     class _Panels(BaseModel):
         panel_count: int
@@ -144,10 +194,14 @@ def _detect_panels(page_png: bytes) -> list[list[float]]:
     ordered = sorted(resp.parsed_output.panels, key=lambda p: p.order)
     boxes = []
     for p in ordered:
-        x0, y0, x1, y1 = p.box
-        # clamp + guard against degenerate boxes
-        x0, y0 = max(0.0, min(x0, 1.0)), max(0.0, min(y0, 1.0))
-        x1, y1 = max(0.0, min(x1, 1.0)), max(0.0, min(y1, 1.0))
+        # clamp grid coords to [1, G]
+        cs = max(1, min(p.col_start, G)); ce = max(1, min(p.col_end, G))
+        rs = max(1, min(p.row_start, G)); re = max(1, min(p.row_end, G))
+        if cs > ce: cs, ce = ce, cs
+        if rs > re: rs, re = re, rs
+        # convert grid cells to normalised [0,1] fractions
+        x0, x1 = (cs - 1) / G, ce / G
+        y0, y1 = (rs - 1) / G, re / G
         if x1 - x0 > 0.02 and y1 - y0 > 0.02:
             boxes.append([x0, y0, x1, y1])
     return boxes or [[0.0, 0.0, 1.0, 1.0]]

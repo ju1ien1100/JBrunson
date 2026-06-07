@@ -761,8 +761,7 @@
         showScreen("reader");
         replayBtn.style.display = "none";
         pageImg.src = `data:image/png;base64,${msg.image_b64}`;
-        buildMasks();
-        requestPanel(0);
+        pageImg.decode().then(() => { buildMasks(); requestPanel(0); });
 
       } else if (msg.type === "page") {
         // Panel mode: the displayed image is the full page; just collect audio.
