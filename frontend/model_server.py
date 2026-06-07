@@ -44,7 +44,7 @@ from aiohttp import web
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent / "kumiko"))  # kumiko + its lib/ subpackage
-from midi_library import melody_for_mood, transpose_segments, KEY_SEMITONES  # noqa: E402
+from midi_library import melody_for_mood, transpose_segments, scale_tempo_segments, KEY_SEMITONES  # noqa: E402
 
 # Load .env so API keys are available regardless of how the script was launched
 _ENV_FILE = Path(__file__).parent.parent / "webgenta" / ".env"
@@ -340,6 +340,7 @@ async def _gen_magenta(pdf_n: int) -> None:
             notes_segs = melody_for_mood(mood)
             semitones  = KEY_SEMITONES.get(key, 0)
             notes_segs = transpose_segments(notes_segs, semitones)
+            notes_segs = scale_tempo_segments(notes_segs, bpm)
             await _magenta_cls.begin_session.remote.aio(session_id, style)
             pcm = await _magenta_cls.render_melody.remote.aio(session_id, notes_segs)
             _state["magenta_wavs"][pdf_n] = _pcm32_to_wav(pcm)
@@ -484,7 +485,7 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
             "magenta_mood": pm.magenta_mood,
             "suno_lyrics": pm.suno_lyrics.strip(),
             "suno_voice_id": voice_id,
-            "music_key": pm.music_key.strip() or "C",
+            "music_key": pm.music_key.strip() if pm.music_key.strip() in KEY_SEMITONES else "C",
             "music_scale": pm.music_scale,
             "tempo_bpm": bpm,
             "reason": pm.reason,

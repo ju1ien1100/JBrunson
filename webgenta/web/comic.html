@@ -1069,7 +1069,7 @@
       if (kd?.key && kd?.scale) {
         mSetKeyScale(kd.key, kd.scale);
       } else {
-        mScalePitches = null;
+        mScalePitches = null; mCurrentKey = null; mCurrentScale = null;
         mKeyBadge.style.display = 'none';
         mUpdateOctave();
       }
@@ -1238,6 +1238,8 @@ registerProcessor('mrt2-processor', MRT2Processor);
       pentatonic_minor: [0,3,5,7,10],
     };
     let mScalePitches = null;   // null = chromatic mode; array = in-scale mode
+    let mCurrentKey   = null;   // active key when in scale mode
+    let mCurrentScale = null;   // active scale when in scale mode
     const mPanelKeys  = {};     // pdf_page → { key, scale, bpm }
 
     // Key layout
@@ -1341,8 +1343,13 @@ registerProcessor('mrt2-processor', MRT2Processor);
       const n = mKeyToMidi(k); if (n >= 0) mNoteOff(n);
     });
     function mUpdateOctave() {
-      mOctLabel.textContent = 'C' + (Math.floor(mOctaveBase / 12) - 1);
-      mBuildKeyboard();
+      if (mScalePitches && mCurrentKey && mCurrentScale) {
+        // Stay in scale mode — rebuild the scale keyboard at the new octave base
+        mSetKeyScale(mCurrentKey, mCurrentScale);
+      } else {
+        mOctLabel.textContent = 'C' + (Math.floor(mOctaveBase / 12) - 1);
+        mBuildKeyboard();
+      }
     }
 
     document.getElementById('m-oct-dn').addEventListener('click', () => { mOctaveBase = Math.max(24, mOctaveBase - 12); mUpdateOctave(); });
@@ -1427,6 +1434,7 @@ registerProcessor('mrt2-processor', MRT2Processor);
     }
 
     function mSetKeyScale(key, scale) {
+      mCurrentKey = key; mCurrentScale = scale;
       const root = KEY_ROOTS[key] ?? 0;
       const ivs  = SCALE_INTERVALS[scale] ?? SCALE_INTERVALS.major;
       const baseOct = Math.floor(mOctaveBase / 12) * 12;

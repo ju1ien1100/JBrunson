@@ -122,6 +122,14 @@ def transpose_segments(segments: list, semitones: int) -> list:
     return out
 
 
+def scale_tempo_segments(segments: list, bpm: int) -> list:
+    """Scale frame counts so the melody plays at `bpm` instead of the 60 BPM baseline."""
+    if bpm <= 0 or bpm == 60:
+        return segments
+    ratio = 60.0 / bpm
+    return [{**seg, "frames": max(1, round(seg["frames"] * ratio))} for seg in segments]
+
+
 def motif_to_note_events(motif: list, frame_ms: int = FRAME_MS) -> list:
     """Convert a motif into a plain [(pitch, start_s, duration_s)] note list.
 
