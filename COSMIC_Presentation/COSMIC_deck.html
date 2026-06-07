@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>C.O.S.M.I.C — Pitch Deck</title>
+<style>
+  /* ─────────────────────────────  Palette (from the app UI)  ───────────────────────────── */
+  :root{
+    --bg:#0e0d10; --bg2:#161519; --surface:#1d211c; --surface2:#222725;
+    --border:#2e332d; --accent:#899878; --accent-hi:#e4e6c3; --text:#f7f7f2;
+    --muted:#9aa090; --beige:#e4e6c3; --red:#f87171; --blue:#7aa2c9; --gold:#d9b46a;
+    --shadow:0 18px 60px rgba(0,0,0,.55);
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:radial-gradient(1200px 800px at 70% -10%,#1b2a20 0%,var(--bg) 55%) fixed;
+    color:var(--text);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    overflow:hidden;
+  }
+
+  /* ─────────────────────────────  Deck / slide mechanics  ───────────────────────────── */
+  .deck{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  .slide{
+    position:absolute;width:min(1180px,94vw);height:min(680px,92vh);
+    background:linear-gradient(160deg,var(--bg2),#101013);
+    border:1px solid var(--border);border-radius:20px;box-shadow:var(--shadow);
+    padding:54px 64px;opacity:0;transform:translateY(24px) scale(.98);
+    transition:opacity .45s ease,transform .45s ease;pointer-events:none;
+    display:flex;flex-direction:column;overflow:hidden;
+  }
+  .slide.active{opacity:1;transform:none;pointer-events:auto}
+  .slide::before{
+    content:"";position:absolute;left:0;top:0;width:6px;height:100%;
+    background:linear-gradient(var(--accent),var(--beige));
+  }
+
+  /* ─────────────────────────────  Typography  ───────────────────────────── */
+  .kicker{color:var(--accent);font-size:.8rem;letter-spacing:.32em;text-transform:uppercase;margin-bottom:14px;font-weight:600}
+  h1{font-size:2.05rem;line-height:1.12;letter-spacing:.01em;margin-bottom:10px}
+  h2{font-size:1.65rem;line-height:1.15;margin-bottom:18px}
+  h2 .em{color:var(--beige)}
+  .lead{color:var(--muted);font-size:1.05rem;line-height:1.5;max-width:46ch}
+  p{line-height:1.5}
+  .muted{color:var(--muted)}
+  .accent{color:var(--accent-hi)}
+  b,strong{color:var(--text)}
+  code{font-family:"SF Mono",ui-monospace,Menlo,monospace;background:#0c0f0c;border:1px solid var(--border);
+       border-radius:5px;padding:1px 6px;color:var(--beige);font-size:.86em}
+
+  /* ─────────────────────────────  Reusable blocks  ───────────────────────────── */
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .card{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:20px 20px;position:relative;overflow:hidden;
+  }
+  .card h3{font-size:1.05rem;margin-bottom:7px;display:flex;align-items:center;gap:9px}
+  .card p{font-size:.92rem;color:var(--muted);line-height:1.45}
+  .tag{display:inline-block;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;
+       color:var(--accent);border:1px solid var(--border);border-radius:999px;padding:3px 10px;margin-bottom:8px}
+  .pill{display:inline-flex;align-items:center;gap:7px;background:#0c0f0c;border:1px solid var(--border);
+        border-radius:999px;padding:6px 13px;font-size:.85rem;color:var(--text)}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+  ul.clean{list-style:none;display:flex;flex-direction:column;gap:12px}
+  ul.clean li{display:flex;gap:12px;align-items:flex-start;font-size:.98rem;line-height:1.4}
+  ul.clean li::before{content:"▸";color:var(--accent);font-size:1rem;line-height:1.4}
+  .big-num{font-size:2.4rem;font-weight:700;color:var(--beige);line-height:1}
+  .stat-l{font-size:.82rem;color:var(--muted);letter-spacing:.04em;margin-top:6px}
+
+  .center{align-items:center;justify-content:center;text-align:center}
+  .fill{flex:1;display:flex;flex-direction:column;justify-content:center}
+
+  /* ─────────────────────────────  Pipeline flow  ───────────────────────────── */
+  .flow{display:flex;align-items:stretch;gap:0;width:100%}
+  .node{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;
+        padding:14px 12px;text-align:center;position:relative}
+  .node .ic{font-size:1.5rem}
+  .node .t{font-weight:600;font-size:.9rem;margin-top:5px}
+  .node .s{font-size:.74rem;color:var(--muted);margin-top:3px;line-height:1.3}
+  .arrow{display:flex;align-items:center;color:var(--accent);font-size:1.3rem;padding:0 8px}
+
+  .layer-row{display:flex;align-items:center;gap:16px;background:var(--surface);
+             border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+  .layer-ic{width:46px;height:46px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+            font-size:1.4rem;flex-shrink:0}
+  .layer-row .meta{flex:1}
+  .layer-row .meta h3{font-size:1.02rem;margin-bottom:2px}
+  .layer-row .meta p{font-size:.85rem;color:var(--muted)}
+  .src{font-size:.74rem;color:var(--accent);letter-spacing:.12em;text-transform:uppercase;text-align:right}
+
+  /* ─────────────────────────────  Title slide  ───────────────────────────── */
+  .title-wrap{text-align:center}
+  .logo{font-size:4.2rem;font-weight:800;letter-spacing:.06em;
+        background:linear-gradient(120deg,var(--accent-hi),var(--accent) 55%,#5e6e52);
+        -webkit-background-clip:text;background-clip:text;color:transparent;line-height:1}
+  .expand{font-size:1.15rem;color:var(--muted);letter-spacing:.18em;margin-top:14px}
+  .expand b{color:var(--accent-hi)}
+  .tagline{font-size:1.3rem;color:var(--text);margin-top:26px;max-width:40ch;margin-inline:auto;line-height:1.4}
+
+  /* ─────────────────────────────  Footer / nav  ───────────────────────────── */
+  .foot{position:absolute;bottom:18px;left:64px;right:64px;display:flex;justify-content:space-between;
+        align-items:center;font-size:.72rem;color:var(--muted);letter-spacing:.08em}
+  .foot .brand{color:var(--accent)}
+  .progress{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--beige));
+            transition:width .4s ease;z-index:50}
+  .help{position:fixed;bottom:10px;right:14px;font-size:.68rem;color:#555;z-index:40}
+  .dots{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:7px;z-index:40}
+  .dots i{width:7px;height:7px;border-radius:50%;background:#3a3f37;cursor:pointer;transition:.3s}
+  .dots i.on{background:var(--beige);width:20px;border-radius:4px}
+
+  .foot .pageno{color:var(--accent-hi);font-weight:700;letter-spacing:.12em;font-variant-numeric:tabular-nums}
+  .small{font-size:.82rem}
+
+  /* ─────────────────────────────  Print / PDF export  ───────────────────────────── */
+  @media print{
+    @page{ size:1180px 680px; margin:0; }
+    html,body{ height:auto; overflow:visible; background:var(--bg) !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .deck{ position:static; display:block; }
+    .progress,.dots,.help{ display:none !important; }
+    .slide{
+      position:relative !important; opacity:1 !important; transform:none !important;
+      width:1180px !important; height:680px !important; max-width:none; max-height:none;
+      border-radius:0; box-shadow:none; border:none;
+      margin:0; page-break-after:always; break-after:page; overflow:hidden;
+    }
+    .slide:last-child{ page-break-after:auto; break-after:auto; }
+  }
+  .kbd{background:#0c0f0c;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;
+       padding:1px 7px;font-family:ui-monospace,monospace;font-size:.78rem}
+</style>
+</head>
+<body>
+<div class="progress" id="prog"></div>
+<div class="deck" id="deck">
+
+  <!-- ───────────────────────  1 · TITLE  ─────────────────────── -->
+  <section class="slide center">
+    <div class="title-wrap">
+      <div class="logo">C.O.S.M.I.C</div>
+      <div class="expand"><b>CO</b>mic &nbsp;<b>S</b>oundtrack &nbsp;<b>M</b>us<b>I</b>c &nbsp;<b>C</b>omposer</div>
+      <p class="tagline">Turn any silent comic, manga, or webtoon into an
+        <span class="accent">immersive, panel-by-panel audio experience.</span></p>
+      <div style="margin-top:34px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <span class="pill"><span class="dot" style="background:var(--gold)"></span>Magenta RT2</span>
+        <span class="pill"><span class="dot" style="background:var(--accent)"></span>Stable Audio 3</span>
+        <span class="pill"><span class="dot" style="background:var(--beige)"></span>Suno</span>
+        <span class="pill"><span class="dot" style="background:var(--blue)"></span>Claude Vision</span>
+      </div>
+      <div style="margin-top:32px">
+        <div style="font-size:.72rem;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);margin-bottom:16px">Built by</div>
+        <div style="display:flex;gap:46px;justify-content:center;flex-wrap:wrap">
+          <div style="text-align:center">
+            <img src="Dhananjay.jpg" alt="Dhananjay"
+                 style="width:84px;height:84px;border-radius:50%;object-fit:cover;
+                        border:2px solid var(--accent);box-shadow:0 6px 18px rgba(0,0,0,.45)" />
+            <div style="margin-top:10px;font-size:.98rem;color:var(--text)">Dhananjay</div>
+          </div>
+          <div style="text-align:center">
+            <img src="Julien_sm.jpg" alt="Julien"
+                 style="width:84px;height:84px;border-radius:50%;object-fit:cover;
+                        border:2px solid var(--beige);box-shadow:0 6px 18px rgba(0,0,0,.45)" />
+            <div style="margin-top:10px;font-size:.98rem;color:var(--text)">Julien</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Hackathon Pitch</span></div>
+  </section>
+
+  <!-- ───────────────────────  2 · CONTEXT (from comic-melody-v3)  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">Context</div>
+    <h2 style="font-size:1.85rem;margin-bottom:14px">The music–comics crossover is <span class="em">already happening.</span></h2>
+    <div class="fill" style="justify-content:stretch">
+      <div class="grid g2" style="gap:30px;align-items:stretch;flex:1">
+
+        <!-- ── MUSICIANS ───────────────────────────────────────────── -->
+        <div style="display:flex;flex-direction:column">
+          <div style="font-size:.72rem;letter-spacing:.2em;color:var(--muted);margin-bottom:14px">MUSICIANS</div>
+          <div class="grid g2" style="gap:14px;margin-bottom:14px;flex:1">
+            <!-- Kanye West -->
+            <div class="card" style="padding:0;overflow:hidden">
+              <div style="background:#15171a;padding:7px 14px;font-size:.66rem;letter-spacing:.16em;color:#cfd2c5">HIP-HOP</div>
+              <div style="padding:12px 14px">
+                <h3 style="font-size:1.05rem;margin-bottom:5px">Kanye West</h3>
+                <p style="color:var(--red);font-size:.82rem;margin-bottom:6px">× Akira (1988)</p>
+                <p style="font-style:italic;font-size:.82rem;color:var(--muted)">"My biggest creative inspiration."</p>
+                <p style="font-size:.7rem;color:#6b7064;margin-top:8px">— The Fader, 2018</p>
+              </div>
+            </div>
+            <!-- The Weeknd -->
+            <div class="card" style="padding:0;overflow:hidden">
+              <div style="background:#1c2730;padding:7px 14px;font-size:.66rem;letter-spacing:.16em;color:#cfd2c5">R&B</div>
+              <div style="padding:12px 14px">
+                <h3 style="font-size:1.05rem;margin-bottom:5px">The Weeknd</h3>
+                <p style="color:var(--red);font-size:.82rem;margin-bottom:6px">× Samurai Champloo</p>
+                <p style="font-style:italic;font-size:.82rem;color:var(--muted)">Anime as a sustained influence.</p>
+                <p style="font-size:.7rem;color:#6b7064;margin-top:8px">— Widely documented</p>
+              </div>
+            </div>
+          </div>
+          <div class="grid g3" style="gap:12px;flex:1">
+            <!-- I Prevail -->
+            <div class="card" style="padding:12px 13px;border-top:3px solid var(--red)">
+              <div style="font-size:.62rem;letter-spacing:.16em;color:var(--red);margin-bottom:6px">METAL</div>
+              <h3 style="font-size:.95rem;margin-bottom:5px">I Prevail</h3>
+              <p style="color:var(--red);font-size:.76rem;margin-bottom:6px">× Dragon Ball Z</p>
+              <p style="font-style:italic;font-size:.76rem;color:var(--muted)">"Dragon Ball energy in their music."</p>
+            </div>
+            <!-- Lil Uzi Vert -->
+            <div class="card" style="padding:12px 13px;border-top:3px solid #8d6fd9">
+              <div style="font-size:.62rem;letter-spacing:.16em;color:#8d6fd9;margin-bottom:6px">RAP</div>
+              <h3 style="font-size:.95rem;margin-bottom:5px">Lil Uzi Vert</h3>
+              <p style="color:var(--red);font-size:.76rem;margin-bottom:6px">× Scott Pilgrim · Naruto</p>
+              <p style="font-style:italic;font-size:.76rem;color:var(--muted)">"Ps & Qs" is fully manga-panel aesthetic.</p>
+            </div>
+            <!-- Beast In Black -->
+            <div class="card" style="padding:12px 13px;border-top:3px solid var(--red)">
+              <div style="font-size:.62rem;letter-spacing:.16em;color:var(--red);margin-bottom:6px">METAL</div>
+              <h3 style="font-size:.95rem;margin-bottom:5px">Beast In Black</h3>
+              <p style="color:var(--red);font-size:.76rem;margin-bottom:6px">× Berserk</p>
+              <p style="font-style:italic;font-size:.76rem;color:var(--muted)">Entire discography drawn from Berserk.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── VISUAL ARTISTS & FILMMAKERS ─────────────────────────── -->
+        <div style="display:flex;flex-direction:column">
+          <div style="font-size:.72rem;letter-spacing:.2em;color:var(--muted);margin-bottom:14px">VISUAL ARTISTS &amp; FILMMAKERS</div>
+          <div style="display:flex;flex-direction:column;flex:1;justify-content:space-between;gap:12px">
+            <!-- 6 KAWS -->
+            <div class="card" style="padding:11px 14px;border-left:4px solid var(--gold);display:flex;gap:13px;align-items:center">
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--gold);color:#1a1a1a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0">6</div>
+              <div style="flex:0 0 38%">
+                <h3 style="font-size:.95rem;margin:0">KAWS</h3>
+                <p style="color:var(--red);font-size:.74rem">× Cartoon Pop Art</p>
+              </div>
+              <p style="font-size:.76rem;color:var(--muted);flex:1">Simpsons, Looney Tunes aesthetics merged with fine art and brand culture.</p>
+            </div>
+            <!-- 7 Roy Lichtenstein -->
+            <div class="card" style="padding:11px 14px;border-left:4px solid var(--red);display:flex;gap:13px;align-items:center">
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--red);color:#1a1a1a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0">7</div>
+              <div style="flex:0 0 38%">
+                <h3 style="font-size:.95rem;margin:0">Roy Lichtenstein</h3>
+                <p style="color:var(--red);font-size:.74rem">× Comic Strips</p>
+              </div>
+              <p style="font-size:.76rem;color:var(--muted);flex:1">Pioneered Ben-Day dots and bold outlines from newspaper comics.</p>
+            </div>
+            <!-- 8 Takashi Murakami -->
+            <div class="card" style="padding:11px 14px;border-left:4px solid #8d6fd9;display:flex;gap:13px;align-items:center">
+              <div style="width:30px;height:30px;border-radius:50%;background:#8d6fd9;color:#1a1a1a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0">8</div>
+              <div style="flex:0 0 38%">
+                <h3 style="font-size:.95rem;margin:0">Takashi Murakami</h3>
+                <p style="color:var(--red);font-size:.74rem">× Manga / Anime</p>
+              </div>
+              <p style="font-size:.76rem;color:var(--muted);flex:1">Superflat style: manga and anime as fine art and luxury fashion.</p>
+            </div>
+            <!-- 9 Sam Kieth & Gaiman -->
+            <div class="card" style="padding:11px 14px;border-left:4px solid var(--accent);display:flex;gap:13px;align-items:center">
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#1a1a1a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0">9</div>
+              <div style="flex:0 0 38%">
+                <h3 style="font-size:.95rem;margin:0">Sam Kieth &amp; Gaiman</h3>
+                <p style="color:var(--red);font-size:.74rem">× Sandman × Bowie</p>
+              </div>
+              <p style="font-size:.76rem;color:var(--muted);flex:1">Lucifer Morningstar's look based on David Bowie. Music shapes comics too.</p>
+            </div>
+            <!-- 10 Bahi JD -->
+            <div class="card" style="padding:11px 14px;border-left:4px solid var(--blue);display:flex;gap:13px;align-items:center">
+              <div style="width:30px;height:30px;border-radius:50%;background:var(--blue);color:#1a1a1a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0">10</div>
+              <div style="flex:0 0 38%">
+                <h3 style="font-size:.95rem;margin:0">Bahi JD</h3>
+                <p style="color:var(--red);font-size:.74rem">× Anime / Manga</p>
+              </div>
+              <p style="font-size:.76rem;color:var(--muted);flex:1">Kinetic animator rooted in manga motion language and storyboarding.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Context</span></div>
+  </section>
+
+  <!-- ───────────────────────  3 · SOLUTION  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">The Solution</div>
+    <h2>A soundtrack for <span class="em">every panel</span>, generated automatically</h2>
+    <p class="lead" style="margin-bottom:22px">Drop in a comic page. C.O.S.M.I.C detects the panels, understands each one, and
+      composes a custom three-layer soundtrack — then plays the page back panel-by-panel, like a motion comic.</p>
+    <div class="fill">
+      <div class="grid g3">
+        <div class="card"><span class="tag">See</span>
+          <h3>🔍 Detect & read</h3>
+          <p>Finds individual panels and reads them in the correct order — right-to-left for manga, left-to-right for western, top-down for webtoons.</p></div>
+        <div class="card"><span class="tag">Understand</span>
+          <h3>🧠 Score the scene</h3>
+          <p>Claude vision turns each panel into a mood, a music prompt, the spoken dialogue, and a matching character voice.</p></div>
+        <div class="card"><span class="tag">Compose</span>
+          <h3>🎼 Generate audio</h3>
+          <p>Three AI models lay down ambient background, a mood melody, and voiced dialogue — mixed and timed to the panel.</p></div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>The Solution</span></div>
+  </section>
+
+  <!-- ───────────────────────  4 · READER EXPERIENCE  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">The Experience</div>
+    <h2>What a reader sees & hears</h2>
+    <div class="fill">
+      <div class="flow">
+        <div class="node"><div class="ic">⬆️</div><div class="t">Upload a page</div><div class="s">Drag a PDF, pick one page</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="ic">⬛</div><div class="t">Blank page</div><div class="s">Reader opens on darkness</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="ic">🟩</div><div class="t">Panel 1 reveals</div><div class="s">Fades in + its audio plays</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="ic">🟩🟩</div><div class="t">Panel 2…</div><div class="s">Advances on its own</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="ic">🔁</div><div class="t">Replay</div><div class="s">Restart the sequence</div></div>
+      </div>
+      <div class="grid g3" style="margin-top:26px">
+        <div class="card"><h3>⏱️ Dialogue-driven timing</h3><p>A panel stays as long as its spoken line, plus a 3-second tail. Silent panels hold for 5 seconds.</p></div>
+        <div class="card"><h3>⚡ First panel in seconds</h3><p>The reader unlocks the moment the first panel's audio is ready — the rest generate in the background.</p></div>
+        <div class="card"><h3>🎚️ Layered mix</h3><p>Background ambience and melody play underneath; the voice sits on top and sets the pace.</p></div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>The Experience</span></div>
+  </section>
+
+  <!-- ───────────────────────  5 · PIPELINE / ARCHITECTURE  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">How it works</div>
+    <h2>The pipeline, end to end</h2>
+    <div class="fill">
+      <div class="flow" style="margin-bottom:18px">
+        <div class="node"><div class="ic">📄</div><div class="t">PDF page</div><div class="s">rendered @150 DPI</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="ic">🔲</div><div class="t">Panel detect</div><div class="s">kumiko CV → Claude</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="ic">✂️</div><div class="t">Crop panels</div><div class="s">each = one unit</div></div>
+        <div class="arrow">→</div>
+        <div class="node"><div class="ic">🧠</div><div class="t">Analyze</div><div class="s">Claude vision</div></div>
+      </div>
+      <div class="flow">
+        <div class="node" style="border-color:var(--accent)"><div class="ic">🌊</div><div class="t">Background</div><div class="s">Stable Audio 3 · Modal GPU</div></div>
+        <div class="arrow">+</div>
+        <div class="node" style="border-color:var(--gold)"><div class="ic">🎹</div><div class="t">Melody</div><div class="s">Magenta RT2 · Modal GPU</div></div>
+        <div class="arrow">+</div>
+        <div class="node" style="border-color:var(--beige)"><div class="ic">🗣️</div><div class="t">Voice</div><div class="s">Suno API</div></div>
+        <div class="arrow">→</div>
+        <div class="node" style="border-color:var(--blue)"><div class="ic">🎬</div><div class="t">Mixed & timed</div><div class="s">streamed to reader via WebSocket</div></div>
+      </div>
+      <p class="muted small" style="margin-top:18px;text-align:center">A single <code>aiohttp</code> server orchestrates everything — HTTP upload, vision calls,
+        GPU jobs and a live WebSocket to the browser reader.</p>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Architecture</span></div>
+  </section>
+
+  <!-- ───────────────────────  6 · PANEL DETECTION  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">Component · 1</div>
+    <h2>Panel detection that doesn't give up</h2>
+    <p class="lead" style="margin-bottom:22px">The panel is the unit of pacing — so finding it reliably across wildly different art styles is the foundation of the whole product.</p>
+    <div class="fill">
+      <div class="grid g2">
+        <div class="card"><span class="tag">Primary · fast & free</span>
+          <h3>👁️ kumiko (computer vision)</h3>
+          <p>Classic CV gutter/border detection. Instant and zero-cost. Trusted whenever it confidently finds <b>2+ panels</b>.</p></div>
+        <div class="card"><span class="tag">Fallback · robust</span>
+          <h3>🧠 Claude grid detection</h3>
+          <p>When borders vanish — borderless / dark / splash pages — Claude (Sonnet 4.6) maps each panel onto a <code>10×10</code> grid and returns ordered boxes.</p></div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <h3>🧭 Reading-order aware</h3>
+        <p>Detection also infers <b>reading direction</b> — manga right-to-left, western left-to-right, webtoon top-to-bottom — so panels and dialogue come out in the order a human would actually read them. Always degrades gracefully to a whole-page panel.</p>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Panel Detection</span></div>
+  </section>
+
+  <!-- ───────────────────────  7 · SCENE UNDERSTANDING  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">Component · 2</div>
+    <h2>One look → a complete audio brief</h2>
+    <p class="lead" style="margin-bottom:20px">Each cropped panel goes to Claude vision once and comes back as a structured brief that drives all three audio models.</p>
+    <div class="fill">
+      <div class="grid g4">
+        <div class="card"><h3>🌊 Music prompt</h3><p>A rich background-track description — genre, instrumentation, mood — for Stable Audio.</p></div>
+        <div class="card"><h3>🎭 Mood</h3><p>One of 7 moods — <span class="accent">calm · tense · action · sad · mysterious · triumphant · neutral</span> — picks the melody.</p></div>
+        <div class="card"><h3>💬 Dialogue</h3><p>Speech-bubble text transcribed verbatim, in reading order, original language preserved.</p></div>
+        <div class="card"><h3>🗣️ Voice</h3><p>Chooses a male or female voice that matches the panel's dominant speaker.</p></div>
+      </div>
+      <div class="card" style="margin-top:18px">
+        <p class="small"><b>Structured output, not guesswork.</b> Claude returns a typed schema (Pydantic-validated), so every field is safe to feed straight into the generation step — no fragile parsing.</p>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Scene Understanding</span></div>
+  </section>
+
+  <!-- ───────────────────────  8 · THREE LAYERS  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">Component · 3</div>
+    <h2>Three models, three layers of sound</h2>
+    <div class="fill" style="gap:14px;display:flex;flex-direction:column;justify-content:center">
+      <div class="layer-row">
+        <div class="layer-ic" style="background:#16312a;color:var(--accent)">🌊</div>
+        <div class="meta"><h3>Background — the ambience bed</h3><p>A 30-second atmospheric track from the scene's music prompt.</p></div>
+        <div class="src">Stable Audio 3<br/>Small · Modal T4</div>
+      </div>
+      <div class="layer-row">
+        <div class="layer-ic" style="background:#332b14;color:var(--gold)">🎹</div>
+        <div class="meta"><h3>Melody — the mood motif</h3><p>A curated MIDI motif per mood, rendered live by Google's real-time music model.</p></div>
+        <div class="src">Magenta RT2<br/>Modal T4 GPU</div>
+      </div>
+      <div class="layer-row">
+        <div class="layer-ic" style="background:#33321a;color:var(--beige)">🗣️</div>
+        <div class="meta"><h3>Voice — the dialogue</h3><p>Spoken speech-bubble lines in a character-matched voice, transcoded to MP3 for the browser.</p></div>
+        <div class="src">Suno API</div>
+      </div>
+      <p class="muted small" style="text-align:center;margin-top:6px">Layers are independent — if a GPU layer is unavailable, panels still reveal and play whatever is ready. <b>Graceful, never blocking.</b></p>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Audio Layers</span></div>
+  </section>
+
+  <!-- ───────────────────────  9 · MOOD → MUSIC ENGINE  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">Deep dive</div>
+    <h2>The mood → music engine</h2>
+    <p class="lead" style="margin-bottom:20px">A hand-crafted motif library is the bridge between "this panel feels tense" and actual notes a model can perform.</p>
+    <div class="fill">
+      <div class="grid g2">
+        <ul class="clean">
+          <li><b>7 curated motifs</b> — each mood is a sequence of <code>(pitch, hold, gap)</code> notes (e.g. <i>action</i> = a fast driving riff; <i>sad</i> = a slow minor descent).</li>
+          <li><b>Frame-accurate</b> — 1 frame = 40 ms, mapping 1:1 to Magenta's note conditioning <i>and</i> to MIDI ticks.</li>
+          <li><b>Exports real <code>.mid</code> files</b> — pure-Python, zero dependencies, openable in any DAW (Ableton-ready).</li>
+        </ul>
+        <div class="card">
+          <h3 style="margin-bottom:14px">Mood palette</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:9px">
+            <span class="pill">😌 calm</span><span class="pill">😰 tense</span>
+            <span class="pill">💥 action</span><span class="pill">😢 sad</span>
+            <span class="pill">🌫️ mysterious</span><span class="pill">🎺 triumphant</span>
+            <span class="pill">➖ neutral</span>
+          </div>
+          <p class="small muted" style="margin-top:16px">The motif conditions Magenta RT2, which performs it in the <i>style</i> from the scene's music prompt — structure from us, timbre from the model.</p>
+        </div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Mood Engine</span></div>
+  </section>
+
+  <!-- ───────────────────────  10 · INFRA / PERFORMANCE  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">Engineering</div>
+    <h2>Built to feel <span class="em">instant</span></h2>
+    <div class="fill">
+      <div class="grid g3" style="margin-bottom:18px">
+        <div class="card center"><div class="big-num">3</div><div class="stat-l">GPU + API models orchestrated in parallel</div></div>
+        <div class="card center"><div class="big-num">~2–3s</div><div class="stat-l">warm-container render per loop on Modal T4</div></div>
+        <div class="card center"><div class="big-num">1st</div><div class="stat-l">panel unlocks the reader — rest stream in</div></div>
+      </div>
+      <div class="grid g2">
+        <div class="card"><h3>☁️ Serverless GPU on Modal</h3><p>Heavy JAX/PyTorch inference runs on cloud T4s, kept <b>warm</b> (5-min window, weights on a persistent volume) — no cold-start tax, no local GPU needed.</p></div>
+        <div class="card"><h3>⚡ Overlap everything</h3><p>Style embeddings cached at startup; analysis, GPU jobs and voice run concurrently per panel; progress streams live over WebSocket so the UI is never frozen.</p></div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Performance</span></div>
+  </section>
+
+  <!-- ───────────────────────  11 · TECH STACK  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">Under the hood</div>
+    <h2>Tech stack</h2>
+    <div class="fill">
+      <div class="grid g4">
+        <div class="card"><span class="tag">AI · Vision</span><h3>🧠 Claude</h3><p>Sonnet 4.6 for panel layout, Haiku 4.5 for fast per-panel scene analysis.</p></div>
+        <div class="card"><span class="tag">AI · Music</span><h3>🎹 Magenta RT2</h3><p>Google DeepMind's real-time music model (JAX), note-conditioned.</p></div>
+        <div class="card"><span class="tag">AI · Ambience</span><h3>🌊 Stable Audio 3</h3><p>Stability's text-to-audio diffusion model for background beds.</p></div>
+        <div class="card"><span class="tag">AI · Voice</span><h3>🗣️ Suno</h3><p>Voice generation API with selectable character presets.</p></div>
+        <div class="card"><span class="tag">Compute</span><h3>☁️ Modal</h3><p>Serverless T4 GPUs, persistent volumes, warm containers.</p></div>
+        <div class="card"><span class="tag">Backend</span><h3>🐍 Python</h3><p><code>aiohttp</code> async server · HTTP + WebSocket · PyMuPDF.</p></div>
+        <div class="card"><span class="tag">CV</span><h3>🔲 kumiko</h3><p>Classical panel detection · OpenCV.</p></div>
+        <div class="card"><span class="tag">Frontend</span><h3>🌐 Web reader</h3><p>Single-page HTML/JS reader · live WebSocket streaming.</p></div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Tech Stack</span></div>
+  </section>
+
+  <!-- ───────────────────────  12 · HARD PROBLEMS SOLVED  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">Why it's hard</div>
+    <h2>Problems we actually solved</h2>
+    <div class="fill">
+      <div class="grid g2">
+        <div class="card"><h3>🧭 Reading order</h3><p>Manga's right-to-left flow breaks naïve OCR. We infer direction per page so dialogue is voiced in the right sequence.</p></div>
+        <div class="card"><h3>🔲 Borderless panels</h3><p>Splash & dark pages have no gutters for CV. The Claude grid fallback recovers panels by narrative grouping.</p></div>
+        <div class="card"><h3>🗣️ Voice ≠ music</h3><p>Early dialogue came out <i>sung</i>. A dedicated "spoken-word, dry vocal" style + preset voices yields clear speech.</p></div>
+        <div class="card"><h3>⏳ Latency</h3><p>Three models would mean a long wait. Warm GPUs + progressive unlock make the first panel feel immediate.</p></div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Challenges</span></div>
+  </section>
+
+  <!-- ───────────────────────  13 · ROADMAP  ─────────────────────── -->
+  <section class="slide">
+    <div class="kicker">What's next</div>
+    <h2>Roadmap</h2>
+    <div class="fill">
+      <div class="grid g3">
+        <div class="card"><span class="tag">Near term</span>
+          <h3>📚 Full chapters</h3><p>Scale from one page to whole episodes with cross-panel music continuity and crossfades.</p></div>
+        <div class="card"><span class="tag">Near term</span>
+          <h3>🔊 Sound effects</h3><p>Turn onomatopoeia (BOOM, SLASH) into Stable-Audio SFX cues layered on the panel.</p></div>
+        <div class="card"><span class="tag">Polish</span>
+          <h3>🎭 Per-character voices</h3><p>Consistent distinct voices across a story, auto-assigned per speaker.</p></div>
+        <div class="card"><span class="tag">Reach</span>
+          <h3>📖 Beyond comics</h3><p>Generalize the engine to illustrated novels and plain books with auto-narration.</p></div>
+        <div class="card"><span class="tag">Reach</span>
+          <h3>🎚️ DAW handoff</h3><p>Export motifs + stems to Ableton for human producers to arrange.</p></div>
+        <div class="card"><span class="tag">Ship</span>
+          <h3>🌍 Hosted app</h3><p>One-click web deploy so anyone can drop in a page and listen.</p></div>
+      </div>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Roadmap</span></div>
+  </section>
+
+  <!-- ───────────────────────  14 · CLOSING  ─────────────────────── -->
+  <section class="slide center">
+    <div class="title-wrap">
+      <div class="logo" style="font-size:3.4rem">C.O.S.M.I.C</div>
+      <p class="tagline" style="margin-top:18px">Every panel, scored.<br/><span class="accent">We gave comics a soundtrack.</span></p>
+      <div class="grid g3" style="margin-top:34px;max-width:760px">
+        <div class="card center"><h3 style="justify-content:center">🔍 Detect</h3><p>panels + reading order</p></div>
+        <div class="card center"><h3 style="justify-content:center">🧠 Understand</h3><p>mood · dialogue · voice</p></div>
+        <div class="card center"><h3 style="justify-content:center">🎼 Compose</h3><p>3-layer panel audio</p></div>
+      </div>
+      <p style="margin-top:32px;font-size:1.1rem;color:var(--text)">Thank you — let's <span class="accent">hear it</span>. 🎧</p>
+    </div>
+    <div class="foot"><span class="brand">C.O.S.M.I.C</span><span>Thank You</span></div>
+  </section>
+
+</div>
+
+<div class="dots" id="dots"></div>
+<div class="help">← / → or <span class="kbd">Space</span> · <span class="kbd">F</span> fullscreen</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')];
+  const dotsWrap=document.getElementById('dots');
+  const prog=document.getElementById('prog');
+  let i=0;
+  const total=slides.length;
+  const pad=n=>String(n).padStart(2,'0');
+  // Stamp each slide's footer with its page number (e.g. "03 / 14")
+  slides.forEach((s,n)=>{
+    const foot=s.querySelector('.foot');
+    if(foot){
+      const pg=document.createElement('span');
+      pg.className='pageno';
+      pg.textContent=pad(n+1)+' / '+pad(total);
+      foot.appendChild(pg);
+    }
+  });
+  slides.forEach((_,n)=>{const d=document.createElement('i');d.onclick=()=>go(n);dotsWrap.appendChild(d);});
+  const dots=[...dotsWrap.children];
+  function go(n){
+    i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    prog.style.width=((i)/(slides.length-1)*100)+'%';
+  }
+  function next(){go(i+1)} function prev(){go(i-1)}
+  document.addEventListener('keydown',e=>{
+    if(['ArrowRight','ArrowDown',' ','PageDown'].includes(e.key)){e.preventDefault();next();}
+    else if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();prev();}
+    else if(e.key==='Home')go(0);
+    else if(e.key==='End')go(slides.length-1);
+    else if(e.key.toLowerCase()==='f'){
+      if(!document.fullscreenElement)document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    }
+  });
+  document.getElementById('deck').addEventListener('click',e=>{
+    if(e.target.closest('a'))return;
+    const x=e.clientX/window.innerWidth;
+    if(x>0.65)next(); else if(x<0.35)prev();
+  });
+  go(0);
+</script>
+</body>
+</html>
