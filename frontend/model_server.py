@@ -86,6 +86,71 @@ VISION_SYSTEM = (
 )
 MOODS = ("calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral")
 
+PANEL_SYSTEM = (
+    "You are a comic/manga panel detector. Look at one page image and find every "
+    "distinct panel (a framed/bordered illustration cell, or for vertical webtoons, "
+    "each block separated by gaps). Read manga/Japanese RIGHT-TO-LEFT top-to-bottom, "
+    "Western comics left-to-right, webtoon strips top-to-bottom. Return panel_count "
+    "and one box per panel IN READING ORDER. Boxes are [x0,y0,x1,y1] as fractions of "
+    "width/height in [0,1]. Ignore margins, gutters, logos, and page numbers."
+)
+
+
+def _detect_panels(page_png: bytes) -> list[list[float]]:
+    """Claude-vision panel detection -> list of [x0,y0,x1,y1] boxes in reading order.
+
+    Falls back to a single whole-page 'panel' if nothing is detected.
+    """
+    import anthropic
+    from pydantic import BaseModel
+
+    class _Panel(BaseModel):
+        order: int
+        box: list[float]
+
+    class _Panels(BaseModel):
+        panel_count: int
+        panels: list[_Panel]
+
+    img_b64 = base64.b64encode(page_png).decode("ascii")
+    client = anthropic.Anthropic()
+    resp = client.messages.parse(
+        model=VISION_MODEL,
+        max_tokens=2048,
+        system=PANEL_SYSTEM,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image",
+                 "source": {"type": "base64", "media_type": "image/png", "data": img_b64}},
+                {"type": "text", "text": "Detect and count the panels on this page."},
+            ],
+        }],
+        output_format=_Panels,
+    )
+    ordered = sorted(resp.parsed_output.panels, key=lambda p: p.order)
+    boxes = []
+    for p in ordered:
+        x0, y0, x1, y1 = p.box
+        # clamp + guard against degenerate boxes
+        x0, y0 = max(0.0, min(x0, 1.0)), max(0.0, min(y0, 1.0))
+        x1, y1 = max(0.0, min(x1, 1.0)), max(0.0, min(y1, 1.0))
+        if x1 - x0 > 0.02 and y1 - y0 > 0.02:
+            boxes.append([x0, y0, x1, y1])
+    return boxes or [[0.0, 0.0, 1.0, 1.0]]
+
+
+def _crop_png(page_png: bytes, box: list[float]) -> bytes:
+    """Crop a normalized box out of a rendered page PNG, returning PNG bytes."""
+    src = fitz.open("png", page_png)
+    pg = src[0]
+    r = pg.rect
+    x0, y0, x1, y1 = box
+    clip = fitz.Rect(x0 * r.width, y0 * r.height, x1 * r.width, y1 * r.height)
+    out = pg.get_pixmap(clip=clip).tobytes("png")
+    src.close()
+    return out
+
 # ── Modal handles (set at startup if available) ───────────────────────────────
 _stable_cls = None
 _magenta_cls = None
@@ -101,9 +166,13 @@ _state: dict = {
     "magenta_wavs": {},
     "suno_wavs": {},
     "gen_tasks": [],
-    "pipeline_task": None,      # the _analyze_and_generate Task itself
-    "progress": {},             # pdf_page_num -> {analyzed, stable, magenta, suno}
+    "pipeline_task": None,      # the pipeline Task itself
+    "progress": {},             # unit -> {analyzed, stable, magenta, suno}
     "error": None,
+    # Panel mode: the single uploaded page + its detected panels. Panels are the
+    # generation units, keyed 1..K in page_images / page_data / progress.
+    "full_page_png": b"",
+    "panel_boxes": [],
 }
 
 # Live WebSocket connections (for progress broadcasts)
@@ -400,6 +469,42 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
     print("All tracks ready.", flush=True)
 
 
+# ── Panel pipeline (single page → detect panels → per-panel generation) ──────
+
+async def _panel_pipeline(page_png: bytes) -> None:
+    """Detect panels on the single uploaded page, crop them, then run the normal
+    per-unit analysis + audio generation with each PANEL as a unit."""
+    loop = asyncio.get_running_loop()
+    _state["status"] = "detecting"
+    await _broadcast({"type": "status", "status": "detecting"})
+
+    try:
+        boxes = await loop.run_in_executor(None, _detect_panels, page_png)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        print(f"panel detection ERROR: {exc}", flush=True)
+        _state["status"] = "error"
+        _state["error"] = str(exc)
+        await _broadcast({"type": "status", "status": "error", "message": str(exc)})
+        return
+
+    # Crop each panel; panels become units 1..K
+    page_images = {}
+    for i, box in enumerate(boxes, 1):
+        page_images[i] = _crop_png(page_png, box)
+    _state["panel_boxes"] = boxes
+    _state["page_images"] = page_images
+    _state["progress"] = {
+        i: {"analyzed": False, "stable": False, "magenta": False, "suno": False}
+        for i in range(1, len(boxes) + 1)
+    }
+    print(f"Detected {len(boxes)} panels.", flush=True)
+    await _broadcast({"type": "panels_detected", "count": len(boxes)})
+
+    await _analyze_and_generate(list(range(1, len(boxes) + 1)))
+
+
 # ── HTTP handlers ─────────────────────────────────────────────────────────────
 
 async def handle_index(request: web.Request) -> web.FileResponse:
@@ -422,74 +527,60 @@ async def handle_peek(request: web.Request) -> web.Response:
 
 
 async def handle_upload(request: web.Request) -> web.Response:
+    """Accept a PDF + a SINGLE page number; detect panels on that page and run
+    per-panel generation. (To keep cost down we process exactly one page.)"""
     reader = await request.multipart()
     pdf_bytes = None
-    page_from = 1
-    page_to = None
+    page = 1
 
     async for part in reader:
         if part.name == "pdf":
             pdf_bytes = await part.read()
-        elif part.name == "page_from":
+        elif part.name in ("page", "page_from"):  # accept either name
             txt = await part.text()
-            page_from = int(txt) if txt.strip() else 1
-        elif part.name == "page_to":
-            txt = await part.text()
-            page_to = int(txt) if txt.strip() else None
+            if txt.strip():
+                page = int(txt)
 
     if not pdf_bytes:
         return web.json_response({"error": "No PDF file received"}, status=400)
 
-    # Render selected pages
-    page_images_tmp: dict[int, bytes] = {}
-    total = 0
+    # Render exactly the one requested page
     with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
         total = len(doc)
-        page_to = page_to if page_to is not None else total
-        page_from = max(1, min(page_from, total))
-        page_to = max(page_from, min(page_to, total))
-        for i, pg in enumerate(doc):
-            pnum = i + 1
-            if page_from <= pnum <= page_to:
-                pix = pg.get_pixmap(dpi=150)
-                page_images_tmp[pnum] = pix.tobytes("png")
+        page = max(1, min(page, total))
+        full_page_png = doc[page - 1].get_pixmap(dpi=150).tobytes("png")
 
-    selected = sorted(page_images_tmp.keys())
-    if not selected:
-        return web.json_response({"error": "No pages in selected range"}, status=400)
-
-    # Cancel the previous pipeline (analysis coroutine + all gen tasks)
+    # Cancel any previous pipeline + gen tasks
     if _state.get("pipeline_task") and not _state["pipeline_task"].done():
         _state["pipeline_task"].cancel()
     for task in _state.get("gen_tasks", []):
         task.cancel()
 
     _state.update({
-        "status": "analyzing",
+        "status": "detecting",
         "total_pdf_pages": total,
         "pdf_page_list": [],
-        "page_images": page_images_tmp,
+        "page_images": {},
         "page_data": {},
         "stable_wavs": {},
         "magenta_wavs": {},
         "suno_wavs": {},
         "gen_tasks": [],
         "pipeline_task": None,
-        "progress": {
-            pnum: {"analyzed": False, "stable": False, "magenta": False, "suno": False}
-            for pnum in selected
-        },
+        "progress": {},
         "error": None,
+        "full_page_png": full_page_png,
+        "panel_boxes": [],
     })
 
-    pipeline = asyncio.create_task(_analyze_and_generate(selected))
+    pipeline = asyncio.create_task(_panel_pipeline(full_page_png))
     pipeline.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
     _state["pipeline_task"] = pipeline
 
     return web.json_response({
         "total_pages": total,
-        "selected_pages": selected,
-        "status": "analyzing",
+        "page": page,
+        "status": "detecting",
     })
 
 
@@ -524,6 +615,17 @@ async def handle_ws(request: web.Request) -> web.WebSocketResponse:
                 try:
                     data = json.loads(msg.data)
                 except json.JSONDecodeError:
+                    continue
+
+                if data.get("type") == "panel_meta":
+                    full = base64.b64encode(_state.get("full_page_png", b"")).decode("ascii")
+                    await ws.send_json({
+                        "type": "panel_meta",
+                        "image_b64": full,
+                        "panels": [{"order": i + 1, "box": b}
+                                   for i, b in enumerate(_state.get("panel_boxes", []))],
+                        "total": len(_state.get("panel_boxes", [])),
+                    })
                     continue
 
                 if data.get("type") == "get_page":

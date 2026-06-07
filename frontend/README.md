@@ -1,134 +1,130 @@
-# Immersive Audio — PDF → mood → Magenta pipeline
+# Immersive Comic Audio — panel-by-panel soundtrack
 
-Turns a comic/manga/book PDF into per-page background music. Each page is read
-by a vision model that picks a **mood** + a **music style prompt**; that drives
-a curated MIDI melody + Magenta (MRT2) to render an audio clip per page.
+Turn a comic / manga / webtoon PDF into an immersive reader: upload a page, and
+it detects the individual **panels**, generates a soundtrack **per panel**, then
+plays the page back **panel by panel** — each panel fades in as its audio plays,
+then advances to the next.
 
-It runs as **two stages** so the API key and the GPU don't need to live on the
-same machine:
-
-```
- Stage 1  (--analyze)                      Stage 2  (--modal)
- ┌─────────────────────────┐  pages.json   ┌──────────────────────────────┐
- │ Claude vision reads each │ ───────────▶ │ mood → MIDI motif → Modal GPU │
- │ page → mood + prompt     │              │ (Magenta) → one WAV per page  │
- └─────────────────────────┘              └──────────────────────────────┘
-   needs ANTHROPIC_API_KEY                   needs Modal auth + deployed app
-```
-
-`pages.json` is the handoff file between the two stages.
+The main app is **`model_server.py`** (a web app at `http://localhost:8766`).
 
 ---
 
-## Setup (both stages)
+## How it works
+
+```
+ Upload 1 page ─▶ detect panels ─▶ for each panel: analyze ─▶ generate 3 audio layers
+ (in the browser)   (vision)          (mood + dialogue)        (background · melody · voice)
+                                                                          │
+ Reader: blank page ─▶ reveal panel 1 + play its audio ─▶ panel 2 ─▶ … ◀──┘
+```
+
+Each panel gets up to three audio layers:
+
+| Layer | Source | Needs |
+|---|---|---|
+| **Voice** (spoken dialogue) | Suno | `SUNO_API_KEY` |
+| **Background** (ambient bed) | Stable Audio (on Modal GPU) | Modal access + deployed app |
+| **Melody** (mood tune) | Magenta MRT2 (on Modal GPU) | Modal access + deployed app |
+
+Panel detection and per-panel analysis (mood + dialogue) use Claude vision and
+need an `ANTHROPIC_API_KEY`.
+
+> **Minimum to see it work:** an `ANTHROPIC_API_KEY` (detection + analysis) and a
+> `SUNO_API_KEY` (voice). Without Modal, the background and melody layers are
+> simply silent — panels still reveal and play their voice. With Modal access,
+> all three layers play.
+
+---
+
+## Setup
 
 ```bash
 # from the repo root
-source ../music_hack/bin/activate        # or your own venv
+python -m venv .venv && source .venv/bin/activate   # or your own venv
 cd JBrunson/frontend
 pip install -r requirements.txt
 ```
 
-`requirements.txt` is grouped by mode: `pymupdf`/`websockets` (core),
-`anthropic` (stage 1), `modal`+`numpy` (stage 2).
-
----
-
-## Stage 1 — analyze (needs `ANTHROPIC_API_KEY`)
-
-Reads page images + text and writes `pages.json` (mood + style prompt per page).
+Provide API keys (never commit them). Either export them in your shell:
 
 ```bash
-export ANTHROPIC_API_KEY="sk-ant-..."        # in your shell only — never commit it
-
-# first page only (cheapest smoke test)
-python pdf_reader.py Jujutsu_Kaisen.pdf --analyze --pages 1
-
-# specific pages (1-based): single, list, range, or mix
-python pdf_reader.py Jujutsu_Kaisen.pdf --analyze --page-range 7-9
-python pdf_reader.py Jujutsu_Kaisen.pdf --analyze --page-range 1,3,5-7
-
-# add pages to an existing pages.json instead of overwriting it
-python pdf_reader.py Jujutsu_Kaisen.pdf --analyze --page-range 7-9 --append
-
-# whole PDF
-python pdf_reader.py Jujutsu_Kaisen.pdf --analyze
+export ANTHROPIC_API_KEY="sk-ant-..."
+export SUNO_API_KEY="..."
 ```
 
-Options: `--pages N` (first N), `--page-range SPEC` (specific pages, overrides
-`--pages`), `--append` (merge into existing `pages.json`), `--out FILE`
-(default `pages.json`), `--vision-model` (default `claude-opus-4-8`).
+…or copy `../webgenta/.env.example` to `../webgenta/.env` and fill it in —
+`model_server.py` loads that file automatically. (`.env` is gitignored.)
 
----
-
-## Stage 2 — render on Modal (needs Modal auth) ← teammate runs this
-
-Reads `pages.json`, maps each page's mood to a MIDI motif, calls the deployed
-`webgenta-magenta` Modal app, and writes one WAV per page.
+For the **background + melody** layers you also need Modal access and the two
+GPU apps deployed (see `../webgenta/modal_magenta.py` and
+`../webgenta/modal_stability.py`):
 
 ```bash
-# one-time: Modal auth + deployed app (see ../webgenta/modal_magenta.py)
-#   pip install modal && python -m modal setup
-#   modal run ../webgenta/modal_magenta.py::download_checkpoints
-#   modal deploy ../webgenta/modal_magenta.py
-
-# render everything in pages.json
-python pdf_reader.py --modal --pages-json pages.json --out test_output
-
-# render specific pages only (each page = one GPU render = cost/time)
-python pdf_reader.py --modal --pages-json pages.json --page-range 7-9 --out test_output
+pip install modal && python -m modal setup
+modal deploy ../webgenta/modal_magenta.py
+modal deploy ../webgenta/modal_stability.py
 ```
-
-Output: `test_output/page_07_tense.wav`, etc. (named `page_<n>_<mood>.wav`).
-Options: `--page-range SPEC`, `--pages N`, `--app` / `--cls` (Modal app/class
-names, default `webgenta-magenta` / `MagentaInference`).
 
 ---
 
-## `pages.json` format
+## Run it
 
-```json
-{
-  "pdf": "Jujutsu_Kaisen.pdf",
-  "pages": [
-    {
-      "page_number": 1,
-      "total_pages": 11,
-      "mood": "tense",
-      "style_prompt": "dark ominous orchestral strings, building tension",
-      "reason": "why the model chose this mood"
-    }
-  ]
-}
+```bash
+python model_server.py          # no arguments
+# → serves http://localhost:8766
 ```
 
-Moods: `calm`, `tense`, `action`, `sad`, `mysterious`, `triumphant`, `neutral`.
-You can hand-edit `mood`/`style_prompt` before stage 2 to tweak the result.
+Open **http://localhost:8766** and:
+
+1. Drop in a PDF.
+2. Pick a **single page** (panels are detected on that one page — kept to one
+   page to keep generation cost down).
+3. Hit **Generate Soundtrack** and wait for the panels to analyze + generate.
+4. The reader opens on a **blank page**, then reveals each panel in turn while
+   its audio plays.
+
+### Reader timing
+- A panel lasts **as long as its spoken dialogue, plus a 3-second tail**.
+- A panel with **no dialogue** shows for a **default 5 seconds**.
+- Background/melody play underneath but never extend a panel — the length is
+  driven by the dialogue, not the music.
+- A **Replay** button restarts the sequence at the end.
 
 ---
 
-## Reusable MIDI library (`midi_library.py`)
+## Getting content to feed it
 
-The per-mood melodies live in `midi_library.py` and can be reused independently:
+`data/download_webtoon.py` downloads one webtoon chapter from webtoons.com as a
+PDF (panels included), ready to upload above:
+
+```bash
+python ../data/download_webtoon.py --title-no 95 --episode 2
+python ../data/download_webtoon.py --name "Tower of God" --chapter 2
+# → saved to data/files/<title>_ep<N>.pdf  (data/files/ is gitignored)
+```
+
+Use it only for personal/offline testing of content you're allowed to access —
+it won't bypass logins, paywalls, or age gates.
+
+---
+
+## Extra tools (optional)
+
+**`pdf_reader.py`** — an older *batch* pipeline (whole pages, not panels). It can
+analyze pages to a `pages.json` and render audio via Modal, or stream pages to a
+WebSocket server. Run `python pdf_reader.py --help` for the modes.
+
+**`midi_library.py`** — the per-mood MIDI motifs, reusable on their own:
 
 ```python
 from midi_library import MELODY_LIBRARY, melody_for_mood, export_midi
-melody_for_mood("tense")                 # MRT2 render() note segments
-export_midi(MELODY_LIBRARY["action"], "action.mid")   # real .mid file
+export_midi(MELODY_LIBRARY["action"], "action.mid")   # writes a real .mid file
 ```
-
 ```bash
-python midi_library.py --out midi_out          # export all moods as .mid
-python midi_library.py --out midi_out --mood sad
+python midi_library.py --out midi_out            # export every mood as .mid
 ```
 
----
-
-## Third mode: live WebSocket streaming (unrelated to the two stages)
-
-`python pdf_reader.py comic.pdf` streams pages to a local WebSocket server
-(`model_server.py` on `:8765`) — used for the interactive/streaming path, not
-the Modal render.
+Moods: `calm`, `tense`, `action`, `sad`, `mysterious`, `triumphant`, `neutral`.
 
 ---
 
@@ -136,8 +132,9 @@ the Modal render.
 
 | Symptom | Fix |
 |---|---|
-| `ModuleNotFoundError: anthropic` | `pip install -r requirements.txt` (stage 1) |
-| `ModuleNotFoundError: modal` / `numpy` | `pip install -r requirements.txt` (stage 2) |
-| stage 1 auth error | `export ANTHROPIC_API_KEY=...` in the same shell |
-| stage 2 can't find the app | confirm `modal app list` shows `webgenta-magenta` and you're in the right workspace |
-| client deadlocks in WS mode | the server always replies (even on error) — check `model_server.py` is running |
+| `ModuleNotFoundError` | `pip install -r requirements.txt` |
+| Analysis/detection fails with an auth error | set `ANTHROPIC_API_KEY` (shell export or `webgenta/.env`) |
+| No voice on any panel | set `SUNO_API_KEY`; note some dialogue can be flagged by Suno's content moderation |
+| Background + melody always silent | expected without Modal — deploy the Modal apps and authenticate to enable them |
+| A panel's voice won't play in the browser | the server transcodes Suno audio to MP3; confirm `imageio-ffmpeg` is installed |
+| Can't reach the page | confirm `python model_server.py` is running and you're on `http://localhost:8766` |

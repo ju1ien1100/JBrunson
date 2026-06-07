@@ -13,8 +13,9 @@ PDF reader — three modes:
    (embed_style -> render), and writes one WAV per page. Run by whoever has
    Modal credentials. No ANTHROPIC_API_KEY needed.
 
-Two-stage handoff: you run --analyze locally (produces pages.json), your
-teammate runs --modal against the deployed GPU (consumes pages.json).
+Two-stage handoff: run --analyze wherever an ANTHROPIC_API_KEY is available
+(produces pages.json); run --modal wherever Modal access is available (consumes
+pages.json) against the deployed GPU.
 
 Usage:
   # WebSocket streaming (needs model_server.py running on :8765)
