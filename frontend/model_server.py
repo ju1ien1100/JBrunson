@@ -381,7 +381,11 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
             "calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral"
         ]
         suno_lyrics: str
-        suno_voice_id: str
+        suno_voice_id: Literal[
+            "5b915c6d-8d96-416c-9755-eba65868cfef",
+            "c036ce3a-55e4-4690-9b8d-4516b37a96d5",
+            "27f5465b-73c3-4134-b11e-70b0bd571c6c",
+        ]
         reason: str
 
     client = anthropic.Anthropic()
