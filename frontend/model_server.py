@@ -71,6 +71,7 @@ VOICE_FEMALE  = "5b915c6d-8d96-416c-9755-eba65868cfef"  # female voice
 VOICE_KID     = "c036ce3a-55e4-4690-9b8d-4516b37a96d5"  # weird kid voice
 VOICE_MALE    = "27f5465b-73c3-4134-b11e-70b0bd571c6c"  # low male voice
 VOICE_DEFAULT = VOICE_FEMALE
+_VALID_VOICE_IDS = {VOICE_FEMALE, VOICE_KID, VOICE_MALE}
 VISION_MODEL = "claude-haiku-4-5"
 PANEL_VISION_MODEL = "claude-sonnet-4-6"  # higher-capability model for panel boundary detection
 FIRST_BATCH = 3  # pages needed before reader unlocks; rest generate in background
@@ -373,19 +374,13 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
     import anthropic
     from pydantic import BaseModel
 
-    _VALID_VOICE_IDS = {VOICE_FEMALE, VOICE_KID, VOICE_MALE}
-
     class PageMusic(BaseModel):
         stable_audio_prompt: str
         magenta_mood: Literal[
             "calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral"
         ]
         suno_lyrics: str
-        suno_voice_id: Literal[
-            "5b915c6d-8d96-416c-9755-eba65868cfef",
-            "c036ce3a-55e4-4690-9b8d-4516b37a96d5",
-            "27f5465b-73c3-4134-b11e-70b0bd571c6c",
-        ]
+        suno_voice_id: str  # str (not Literal) so Pydantic accepts any value; _VALID_VOICE_IDS guards at use site
         reason: str
 
     client = anthropic.Anthropic()
