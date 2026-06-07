@@ -240,6 +240,16 @@
       padding: .5rem 1rem;
       border-radius: 6px;
     }
+
+    /* Panel reveal: page starts fully masked; each panel fades in on its turn */
+    #page-wrap { position: relative; }
+    #panel-masks { position: absolute; inset: 0; pointer-events: none; }
+    .panel-mask {
+      position: absolute;
+      background: #0a0a0a;
+      transition: opacity .7s ease;
+    }
+    .panel-mask.revealed { opacity: 0; }
   </style>
 </head>
 <body>
@@ -262,12 +272,14 @@
     </div>
 
     <div class="range-row" id="range-row" style="display:none">
-      <label>Pages</label>
-      <input type="number" id="page-from" value="1" min="1" />
-      <label>to</label>
-      <input type="number" id="page-to" min="1" placeholder="all" />
+      <label>Page</label>
+      <input type="number" id="page-num" value="1" min="1" />
       <span id="page-count-hint"></span>
     </div>
+    <p style="color:var(--muted);font-size:.78rem;max-width:30rem;text-align:center">
+      Pick a single page — panels are detected on that page and the soundtrack
+      is generated panel by panel.
+    </p>
 
     <button id="generate-btn" disabled>Generate Soundtrack</button>
   </div>
@@ -304,13 +316,13 @@
   <div id="screen-reader" class="screen">
     <div id="page-wrap">
       <img id="page-img" src="" alt="Comic page" />
+      <div id="panel-masks"></div>
       <div id="gen-badge">Generating…</div>
     </div>
 
     <div id="reader-nav">
-      <button id="prev-btn" class="secondary" disabled>← Prev</button>
       <span id="page-counter">—</span>
-      <button id="next-btn" disabled>Next →</button>
+      <button id="replay-btn" class="secondary" style="display:none">⟳ Replay</button>
     </div>
 
     <div id="track-strip">
@@ -348,8 +360,7 @@
     const fileName     = document.getElementById("file-name");
     const fileMeta     = document.getElementById("file-meta");
     const rangeRow     = document.getElementById("range-row");
-    const pageFrom     = document.getElementById("page-from");
-    const pageTo       = document.getElementById("page-to");
+    const pageNum      = document.getElementById("page-num");
     const pageCountHint= document.getElementById("page-count-hint");
     const generateBtn  = document.getElementById("generate-btn");
 
@@ -362,13 +373,10 @@
 
     // Reader
     const pageImg    = document.getElementById("page-img");
+    const panelMasks = document.getElementById("panel-masks");
     const genBadge   = document.getElementById("gen-badge");
     const pageCounter= document.getElementById("page-counter");
-    const nextBtn    = document.getElementById("next-btn");
-    const prevBtn    = document.getElementById("prev-btn");
-    const bgDot      = document.getElementById("bg-dot");
-    const melodyDot  = document.getElementById("melody-dot");
-    const voiceDot   = document.getElementById("voice-dot");
+    const replayBtn  = document.getElementById("replay-btn");
     const backBtn    = document.getElementById("back-to-upload");
     const connError  = document.getElementById("conn-error");
 
@@ -379,25 +387,31 @@
     melodyAudio.volume= 0.6;
     voiceAudio.volume = 1.0;
 
+    // Panel timing: a panel lasts as long as its spoken text (voice), then a
+    // short tail. Music tracks play underneath but do NOT extend the panel.
+    const PANEL_TAIL_MS = 3000;        // linger 3s after the text/voice finishes
+    const PANEL_NO_TEXT_MS = 5000;     // no text/voice → default 5s
+    const PANEL_SAFETY_CAP_MS = 60000; // safety if a voice 'ended' never fires
+
     // ── State ────────────────────────────────────────────────────────────────
     let ws              = null;
-    let currentPage     = 1;
-    let totalPages      = 1;
-    let _pendingPageReq = null; // page number queued while WS is reconnecting
-    let pendingTrack  = null;
-    let pendingMime   = "audio/wav";
-    let hasMelody     = false;
-    let readerReady   = false;
-    let selectedFile  = null;
+    let readerReady     = false;
+    let selectedFile    = null;
+    let pendingTrack    = null;
+    let pendingMime     = "audio/wav";
+    let _pendingUrls    = { bg: null, melody: null, voice: null };
 
-    // Page cache: Map<readerPageNum, {img, bg, melody, voice}>
-    const pageCache = new Map();
-    let _pendingUrls = { bg: null, melody: null, voice: null };
-    let _pendingImage = null; // page image data-URL for the page being received
+    // Panel reveal state
+    let panels       = [];   // [{order, box}]
+    let panelTotal   = 0;
+    let curPanel     = 0;    // 0-based index of the panel being shown
+    let maskEls      = [];   // overlay divs, one per panel
+    let advanceTimer = null;
+    let panelMetaRequested = false;
 
     window.addEventListener("beforeunload", () => {
-      pageCache.forEach(c => {
-        [c.bg, c.melody, c.voice].forEach(u => u && URL.revokeObjectURL(u));
+      [bgAudio, melodyAudio, voiceAudio].forEach(a => {
+        if (a.src && a.src.startsWith("blob:")) URL.revokeObjectURL(a.src);
       });
     });
 
@@ -445,10 +459,9 @@
         const r = await fetch(`${API}/peek`, { method: "POST", body: fd });
         const data = await r.json();
         const total = data.total_pages || 0;
-        pageCountHint.textContent = `(${total} pages total)`;
-        pageTo.max = total;
-        pageTo.placeholder = String(total);
-        pageFrom.max = total;
+        pageCountHint.textContent = `(pick 1–${total})`;
+        pageNum.max = total;
+        pageNum.value = "1";
         generateBtn.disabled = false;
       } catch {
         pageCountHint.textContent = "(could not read page count)";
@@ -463,18 +476,21 @@
 
       const fd = new FormData();
       fd.append("pdf", selectedFile);
-      fd.append("page_from", pageFrom.value || "1");
-      fd.append("page_to", pageTo.value || "");
+      fd.append("page", pageNum.value || "1");
 
       try {
         const r = await fetch(`${API}/upload`, { method: "POST", body: fd });
         const data = await r.json();
         if (data.error) { alert(data.error); generateBtn.disabled = false; generateBtn.textContent = "Generate Soundtrack"; return; }
 
-        pdfPageList = data.selected_pages;
-        buildProgressTable(pdfPageList);
-        pageCache.clear();
+        // Panels are detected server-side; the progress table is built when the
+        // "panels_detected" event arrives.
+        pdfPageList = [];
+        pageProgress.clear();
+        progressTbody.innerHTML = "";
+        progressStatusText.textContent = "Detecting panels…";
         readerReady = false;
+        panelMetaRequested = false;
         readerBanner.classList.remove("visible");
         showScreen("progress");
         generateBtn.textContent = "Generate Soundtrack";
@@ -495,7 +511,7 @@
         const tr = document.createElement("tr");
         tr.id = `row-${pnum}`;
         tr.innerHTML = `
-          <td>Page ${idx + 1} <span style="color:#555">(pdf ${pnum})</span></td>
+          <td>Panel ${idx + 1}</td>
           <td><span class="cell-dot" id="dot-${pnum}-analyzed"></span></td>
           <td><span class="cell-dot" id="dot-${pnum}-stable"></span></td>
           <td><span class="cell-dot" id="dot-${pnum}-magenta"></span></td>
@@ -532,10 +548,11 @@
 
       ws.onopen = () => {
         connError.style.display = "none";
-        if (_pendingPageReq !== null) {
-          const n = _pendingPageReq;
-          _pendingPageReq = null;
-          requestPage(n);
+        const active = document.querySelector(".screen.active");
+        if (panelMetaRequested || (active && active.id === "screen-reader")) {
+          // (Re)start the panel reveal once the socket is ready.
+          panelMetaRequested = false;
+          ws.send(JSON.stringify({ type: "panel_meta" }));
         }
       };
       ws.onerror = () => connError.style.display = "block";
@@ -557,8 +574,15 @@
       // ── Status events ──────────────────────────────────────────────────
       if (msg.type === "status") {
         const s = msg.status;
-        if (s === "analyzing") {
-          progressStatusText.textContent = `Analyzing pages…`;
+        // On (re)connect sync, rebuild the panel table if we have the unit list
+        if (msg.pdf_page_list && msg.pdf_page_list.length && progressTbody.children.length === 0) {
+          pdfPageList = msg.pdf_page_list;
+          buildProgressTable(pdfPageList);
+        }
+        if (s === "detecting") {
+          progressStatusText.textContent = "Detecting panels…";
+        } else if (s === "analyzing") {
+          progressStatusText.textContent = `Analyzing panels…`;
           // Spin first analyzed dot
           if (pdfPageList.length) setDotState(pdfPageList[0], "analyzed", "spin");
         } else if (s === "generating") {
@@ -585,6 +609,15 @@
             if (p.suno)     setDotState(n, "suno", "done");
           });
         }
+        return;
+      }
+
+      // ── Panels detected → build the per-panel progress table ───────────
+      if (msg.type === "panels_detected") {
+        pdfPageList = Array.from({ length: msg.count }, (_, i) => i + 1);
+        buildProgressTable(pdfPageList);
+        progressStatusText.textContent =
+          `Detected ${msg.count} panel${msg.count === 1 ? "" : "s"} — analyzing…`;
         return;
       }
 
@@ -622,32 +655,27 @@
         return;
       }
 
-      // ── Reader messages ────────────────────────────────────────────────
-      if (msg.type === "page") {
-        currentPage = msg.page_number;
-        totalPages  = msg.total;
-        setPageCounter(currentPage, totalPages);
-        _pendingImage = `data:image/png;base64,${msg.image_b64}`;
-        pageImg.src = _pendingImage;
+      // ── Reader messages (panel-by-panel reveal) ─────────────────────────
+      if (msg.type === "panel_meta") {
+        panels     = msg.panels || [];
+        panelTotal = msg.total || panels.length;
+        showScreen("reader");
+        replayBtn.style.display = "none";
+        pageImg.src = `data:image/png;base64,${msg.image_b64}`;
+        buildMasks();
+        requestPanel(0);
+
+      } else if (msg.type === "page") {
+        // Panel mode: the displayed image is the full page; just collect audio.
         genBadge.classList.remove("visible");
-        hasMelody = false;
         _pendingUrls = { bg: null, melody: null, voice: null };
-        resetDots();
 
       } else if (msg.type === "track_header") {
         pendingTrack = msg.track;
         pendingMime  = msg.mime || (msg.track === "voice" ? "audio/mpeg" : "audio/wav");
-        if (msg.track === "melody") hasMelody = true;
 
       } else if (msg.type === "tracks_end") {
-        // Cache and play (include the page image so Back/Prev can restore it)
-        pageCache.set(currentPage, { ..._pendingUrls, img: _pendingImage });
-        stopAll();
-        if (_pendingUrls.bg)     bgAudio.src     = _pendingUrls.bg;
-        if (_pendingUrls.melody) melodyAudio.src = _pendingUrls.melody;
-        if (_pendingUrls.voice)  voiceAudio.src  = _pendingUrls.voice;
-        playAll(_pendingUrls);
-        if (!hasMelody) nextBtn.disabled = currentPage >= totalPages;
+        onPanelAudioReady();
 
       } else if (msg.type === "error") {
         console.error("Server error:", msg.message);
@@ -657,69 +685,103 @@
 
     function handleBinary(data) {
       if (!pendingTrack) return;
-      const blob = new Blob([data], { type: pendingMime });
-      const url  = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(new Blob([data], { type: pendingMime }));
       if      (pendingTrack === "background") _pendingUrls.bg     = url;
       else if (pendingTrack === "melody")     _pendingUrls.melody = url;
       else if (pendingTrack === "voice")      _pendingUrls.voice  = url;
       pendingTrack = null;
     }
 
-    // ── Reader logic ──────────────────────────────────────────────────────────
+    // ── Reader: panel-by-panel reveal ───────────────────────────────────────────
     function startReader() {
-      showScreen("reader");
-      requestPage(1);
+      panelMetaRequested = true;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        panelMetaRequested = false;
+        ws.send(JSON.stringify({ type: "panel_meta" }));
+      }
     }
 
-    function requestPage(n) {
-      if (pageCache.has(n)) {
-        serveCached(n);
-        return;
-      }
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        // WS is reconnecting — queue the request and show the badge
-        _pendingPageReq = n;
-        genBadge.classList.add("visible");
-        return;
-      }
-      _pendingPageReq = null;
-      genBadge.classList.add("visible");
-      nextBtn.disabled = true;
-      hasMelody = false;
-      pendingTrack = null;
+    function buildMasks() {
+      // Cover every panel with an opaque box; reveal them one at a time.
+      panelMasks.innerHTML = "";
+      maskEls = panels.map(p => {
+        const [x0, y0, x1, y1] = p.box;
+        const d = document.createElement("div");
+        d.className = "panel-mask";
+        d.style.left   = (x0 * 100) + "%";
+        d.style.top    = (y0 * 100) + "%";
+        d.style.width  = ((x1 - x0) * 100) + "%";
+        d.style.height = ((y1 - y0) * 100) + "%";
+        panelMasks.appendChild(d);
+        return d;
+      });
+    }
+
+    function requestPanel(i) {
+      if (i >= panelTotal) { finishReader(); return; }
+      curPanel = i;
+      pageCounter.textContent = `Panel ${i + 1} / ${panelTotal}`;
       _pendingUrls = { bg: null, melody: null, voice: null };
+      pendingTrack = null;
       resetDots();
-      ws.send(JSON.stringify({ type: "get_page", page: n }));
+      genBadge.classList.add("visible");
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "get_page", page: i + 1 }));
+      }
     }
 
-    function serveCached(n) {
-      const c = pageCache.get(n);
-      hasMelody = !!c.melody;
-      // Revisited page: enable Next by position (don't re-gate on the melody
-      // finishing — otherwise Next stays stuck when there's no melody track).
-      nextBtn.disabled = n >= totalPages;
-      if (c.img) pageImg.src = c.img;   // restore the page image (Back/Prev fix)
+    function onPanelAudioReady() {
+      genBadge.classList.remove("visible");
+      revealPanel(curPanel);
+      playPanelAndAdvance(_pendingUrls);
+    }
+
+    function revealPanel(i) {
+      const m = maskEls[i];
+      if (!m) return;
+      m.classList.add("revealed");
+      m.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function playPanelAndAdvance(urls) {
       stopAll();
-      if (c.bg)     { bgAudio.src     = c.bg;     setTdot("bg-dot",     "ready"); }
-      if (c.melody) { melodyAudio.src = c.melody; setTdot("melody-dot", "ready"); }
-      if (c.voice)  { voiceAudio.src  = c.voice;  setTdot("voice-dot",  "ready"); }
-      setPageCounter(n, totalPages);
-      playAll(c);
+      if (urls.bg)     { bgAudio.src     = urls.bg;     bgAudio.play().catch(()=>{});     setTdot("bg-dot","playing"); }
+      if (urls.melody) { melodyAudio.src = urls.melody; melodyAudio.play().catch(()=>{}); setTdot("melody-dot","playing"); }
+      if (urls.voice)  { voiceAudio.src  = urls.voice;  voiceAudio.play().catch(()=>{});  setTdot("voice-dot","playing"); }
+
+      clearTimeout(advanceTimer);
+      let advanced = false;
+      const go = () => {
+        if (advanced) return;
+        advanced = true;
+        voiceAudio.onended = null;
+        clearTimeout(advanceTimer);
+        stopAll();                  // cut music; panel length is text-driven, not music-driven
+        requestPanel(curPanel + 1);
+      };
+
+      // Panel length = spoken text (voice) + 3s tail. No text/voice → 5s default.
+      // The (longer) music tracks play underneath but never extend the panel.
+      if (urls.voice) {
+        voiceAudio.onended = () => {
+          clearTimeout(advanceTimer);
+          advanceTimer = setTimeout(go, PANEL_TAIL_MS);
+        };
+        advanceTimer = setTimeout(go, PANEL_SAFETY_CAP_MS); // safety if 'ended' never fires
+      } else {
+        advanceTimer = setTimeout(go, PANEL_NO_TEXT_MS);
+      }
+    }
+
+    function finishReader() {
+      clearTimeout(advanceTimer);
+      stopAll();
+      pageCounter.textContent = `Done · ${panelTotal} panel${panelTotal === 1 ? "" : "s"}`;
+      replayBtn.style.display = "inline-block";
     }
 
     function stopAll() {
       [bgAudio, melodyAudio, voiceAudio].forEach(a => { a.pause(); a.currentTime = 0; });
-    }
-
-    function playAll(urls) {
-      if (urls.bg)     { bgAudio.play().catch(() => {});     setTdot("bg-dot",     "playing"); }
-      if (urls.melody) { melodyAudio.play().catch(() => {}); setTdot("melody-dot", "playing"); }
-      if (urls.voice)  { voiceAudio.play().catch(() => {});  setTdot("voice-dot",  "playing"); }
-    }
-
-    function setPageCounter(n, total) {
-      pageCounter.textContent = `${n} / ${total}`;
-      prevBtn.disabled = n <= 1;
     }
 
     function setTdot(id, state) {
@@ -731,20 +793,13 @@
       ["bg-dot", "melody-dot", "voice-dot"].forEach(id => setTdot(id, ""));
     }
 
-    // Melody ended → unlock Next
-    melodyAudio.addEventListener("ended", () => {
-      setTdot("melody-dot", "ready");
-      nextBtn.disabled = currentPage >= totalPages;
-    });
     bgAudio.addEventListener("play",  () => setTdot("bg-dot", "playing"));
     bgAudio.addEventListener("pause", () => setTdot("bg-dot", "ready"));
-    voiceAudio.addEventListener("ended", () => setTdot("voice-dot", "ready"));
 
-    nextBtn.addEventListener("click", () => {
-      if (currentPage < totalPages) { currentPage++; requestPage(currentPage); }
-    });
-    prevBtn.addEventListener("click", () => {
-      if (currentPage > 1) { currentPage--; requestPage(currentPage); }
+    replayBtn.addEventListener("click", () => {
+      maskEls.forEach(m => m.classList.remove("revealed"));
+      replayBtn.style.display = "none";
+      requestPanel(0);
     });
 
     // ── Misc ──────────────────────────────────────────────────────────────────
