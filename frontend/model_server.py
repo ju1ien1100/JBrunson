@@ -63,7 +63,7 @@ SUNO_BASE = "https://api.suno.com"
 SUNO_POLL_INTERVAL = 3.0
 SUNO_POLL_TIMEOUT = 180.0
 ANIME_VOICE_STYLE = (
-    "a cappella, voice only, no instruments, no background music, no beat, "
+    "spoken word, solo, voice only, no instruments, no background music, no beat, "
     "spoken word, anime female voice, kawaii, clear speech, dry vocal"
 )
 ANIME_VOICE_ID = "5b915c6d-8d96-416c-9755-eba65868cfef"
@@ -702,7 +702,7 @@ async def cors_middleware(request: web.Request, handler):
             resp = ex
     resp.headers["Access-Control-Allow-Origin"] = "*"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
     return resp
 
 

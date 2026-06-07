@@ -7,7 +7,7 @@ $envFile  = Join-Path $webgenta ".env"
 
 if (Test-Path $envFile) {
     Get-Content $envFile | ForEach-Object {
-        if ($_ -match '^([A-Z_][A-Z0-9_]*)=(.+)$') {
+        if ($_ -match '^([A-Za-z_][A-Za-z0-9_]*)=(.+)$') {
             Set-Item -Path "Env:\$($Matches[1])" -Value $Matches[2]
         }
     }

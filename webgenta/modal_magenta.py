@@ -243,7 +243,7 @@ class MagentaInference:
 
         pcm_chunks = []
         for seg in segments:
-            chunk = self.render_chunk(session_id, seg["notes"], seg.get("frames", 1))
+            chunk = self.render_chunk.local(session_id, seg["notes"], seg.get("frames", 1))
             pcm_chunks.append(np.frombuffer(chunk, dtype=np.float32))
         if not pcm_chunks:
             return b""
