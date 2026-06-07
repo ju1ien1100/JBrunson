@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Comic Reader</title>
+  <title>C.O.S.M.I.C — COmic Soundtrack MusIc Composer</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -21,7 +21,7 @@
     }
 
     body {
-      background: var(--bg);
+      background: radial-gradient(1200px 800px at 70% -10%, #1b2a20 0%, var(--bg) 55%) fixed;
       color: var(--text);
       font-family: system-ui, -apple-system, sans-serif;
       min-height: 100vh;
@@ -325,43 +325,237 @@
       border-radius: 3px; line-height: 1;
     }
     .key-hint { font-size: 0.68rem; color: var(--muted); margin-left: 0.5rem; }
+
+    /* ── Landing page (upload screen) ────────────────────────────────────── */
+    #screen-upload { max-width: 980px; gap: 0; padding-top: 3rem; }
+
+    .hero {
+      text-align: center;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 1.1rem; margin-bottom: 2.5rem;
+    }
+    .kicker {
+      color: var(--accent); font-size: .72rem; letter-spacing: .34em;
+      text-transform: uppercase; font-weight: 600;
+    }
+    .hero-title {
+      font-size: clamp(2.6rem, 8vw, 5rem); font-weight: 800;
+      letter-spacing: .05em; line-height: 1;
+      background: linear-gradient(180deg, var(--text), var(--accent-hi));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .hero-sub {
+      font-size: 1.02rem; color: var(--accent-hi); font-weight: 500;
+      letter-spacing: .02em;
+    }
+    .hero-lead { color: var(--muted); font-size: 1.02rem; line-height: 1.65; max-width: 62ch; }
+    .hero-lead strong { color: var(--text); font-weight: 600; }
+
+    .section { width: 100%; margin-top: 3.5rem; }
+    .section-label {
+      text-align: center; color: var(--muted); font-size: .72rem;
+      letter-spacing: .28em; text-transform: uppercase; margin-bottom: 1.6rem;
+    }
+
+    /* Upload card */
+    .upload-card {
+      width: 100%; max-width: 640px; margin: 0 auto;
+      display: flex; flex-direction: column; gap: 1.1rem; align-items: center;
+    }
+
+    /* Featured tech (Magenta / Suno / Stability) */
+    .tech-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;
+    }
+    @media (max-width: 760px) { .tech-grid { grid-template-columns: 1fr; } }
+    .tech-card {
+      background: linear-gradient(160deg, var(--surface), #161519);
+      border: 1px solid var(--border); border-radius: 16px;
+      padding: 1.5rem 1.4rem;
+      display: flex; flex-direction: column; gap: .7rem;
+      transition: border-color .2s, transform .2s;
+    }
+    .tech-card:hover { border-color: var(--accent); transform: translateY(-3px); }
+    .tech-icon {
+      width: 48px; height: 48px; border-radius: 13px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .tech-card .role {
+      font-size: .68rem; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--accent); font-weight: 700;
+    }
+    .tech-card h3 { font-size: 1.02rem; font-weight: 700; }
+    .tech-card h3 span { color: var(--muted); font-weight: 400; font-size: .82rem; }
+    .tech-card p { font-size: .85rem; color: var(--muted); line-height: 1.5; }
+
+    /* Supporting stack chips */
+    .stack-row { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: center; }
+    .chip {
+      display: inline-flex; align-items: center; gap: .5rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 999px; padding: .5rem 1rem; font-size: .8rem; color: var(--muted);
+    }
+    .chip strong { color: var(--text); font-weight: 600; }
+    .chip svg { flex-shrink: 0; }
+
+    /* Collaborators */
+    .collab-row { display: flex; gap: 1.25rem; justify-content: center; flex-wrap: wrap; }
+    .collab {
+      display: flex; align-items: center; gap: .85rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: .85rem 1.5rem .85rem .85rem;
+    }
+    .collab .avatar {
+      width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 1.05rem; color: var(--bg);
+      background: linear-gradient(135deg, var(--accent), var(--accent-hi));
+    }
+    .collab .who { display: flex; flex-direction: column; }
+    .collab .who .name { font-weight: 600; font-size: .95rem; }
+    .collab .who .label { color: var(--muted); font-size: .75rem; }
+
+    .footer-note { text-align: center; color: var(--muted); font-size: .75rem; margin-top: 3.5rem; }
   </style>
 </head>
 <body>
 
-  <!-- ── Screen 1: Upload ─────────────────────────────────────────────── -->
+  <!-- ── Screen 1: Landing / Upload ───────────────────────────────────── -->
   <div id="screen-upload" class="screen active">
-    <h1>Comic Reader</h1>
 
-    <div id="drop-zone">
-      <p>Drop a PDF here or <strong>click to browse</strong></p>
-      <input type="file" id="pdf-input" accept=".pdf" />
+    <!-- Hero -->
+    <div class="hero">
+      <div class="kicker">COmic Soundtrack MusIc Composer</div>
+      <div class="hero-title">C.O.S.M.I.C</div>
+      <div class="hero-sub">Give silent comics a soundtrack — one panel at a time.</div>
+      <p class="hero-lead">
+        An immersive webtoon / manga audio system. Drop in a page and C.O.S.M.I.C uses
+        <strong>vision</strong> to detect every panel and read its mood &amp; dialogue, then
+        composes a synchronized <strong>three-layer soundtrack</strong> — background ambience,
+        a melodic motif, and spoken voice-over — that plays as each panel fades in.
+      </p>
     </div>
 
-    <div id="file-info">
-      <div id="file-icon">📄</div>
-      <div id="file-details">
-        <div id="file-name"></div>
-        <div id="file-meta"></div>
+    <!-- Upload card (the primary CTA) -->
+    <div class="upload-card">
+      <div id="drop-zone">
+        <p>Drop a PDF here or <strong>click to browse</strong></p>
+        <input type="file" id="pdf-input" accept=".pdf" />
+      </div>
+
+      <div id="file-info">
+        <div id="file-icon">📄</div>
+        <div id="file-details">
+          <div id="file-name"></div>
+          <div id="file-meta"></div>
+        </div>
+      </div>
+
+      <div class="range-row" id="range-row" style="display:none">
+        <label>Page</label>
+        <input type="number" id="page-num" value="1" min="1" />
+        <span id="page-count-hint"></span>
+      </div>
+      <p style="color:var(--muted);font-size:.78rem;max-width:30rem;text-align:center">
+        Pick a single page — panels are detected on that page and the soundtrack
+        is generated panel by panel.
+      </p>
+
+      <button id="generate-btn" disabled>Generate Soundtrack</button>
+    </div>
+
+    <!-- Featured generative models -->
+    <div class="section">
+      <div class="section-label">Three layers · three generative models</div>
+      <div class="tech-grid">
+
+        <!-- Stable Audio 3 — Stability AI -->
+        <div class="tech-card">
+          <div class="tech-icon" style="background:rgba(160,106,217,.16)">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#b888e8"
+                 stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 3 21 7.5 12 12 3 7.5"/>
+              <polyline points="3 12 12 16.5 21 12"/>
+              <polyline points="3 16.5 12 21 21 16.5"/>
+            </svg>
+          </div>
+          <div class="role">Background</div>
+          <h3>Stable Audio 3 <span>· Stability AI</span></h3>
+          <p>Generates the ambient instrumental bed for each panel from a rich text prompt.</p>
+        </div>
+
+        <!-- Magenta RT2 — Google -->
+        <div class="tech-card">
+          <div class="tech-icon" style="background:rgba(255,77,184,.14)">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ff4db8"
+                 stroke-width="2" stroke-linecap="round">
+              <line x1="4" y1="9"  x2="4"  y2="15"/>
+              <line x1="9" y1="4"  x2="9"  y2="20"/>
+              <line x1="14" y1="7" x2="14" y2="17"/>
+              <line x1="19" y1="2.5" x2="19" y2="21.5"/>
+            </svg>
+          </div>
+          <div class="role">Melody</div>
+          <h3>Magenta RT2 <span>· Google</span></h3>
+          <p>Real-time neural music engine that turns a panel's mood into a melodic motif.</p>
+        </div>
+
+        <!-- Suno -->
+        <div class="tech-card">
+          <div class="tech-icon" style="background:rgba(217,180,106,.14)">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#e0c074"
+                 stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="3" width="6" height="11" rx="3"/>
+              <path d="M5 11a7 7 0 0 0 14 0"/>
+              <line x1="12" y1="18" x2="12" y2="21"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+            </svg>
+          </div>
+          <div class="role">Voice</div>
+          <h3>Suno <span>· voice-over</span></h3>
+          <p>Voices the dialogue lifted from each panel's speech bubbles in reading order.</p>
+        </div>
+
       </div>
     </div>
 
-    <div class="range-row" id="range-row" style="display:none">
-      <label>Page</label>
-      <input type="number" id="page-num" value="1" min="1" />
-      <span id="page-count-hint"></span>
+    <!-- Supporting stack -->
+    <div class="section">
+      <div class="section-label">Built with</div>
+      <div class="stack-row">
+        <span class="chip">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7aa2c9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+          <strong>Claude</strong> vision — panel &amp; scene understanding
+        </span>
+        <span class="chip"><strong>Modal</strong> · warm T4 GPUs</span>
+        <span class="chip"><strong>kumiko</strong> · panel detection</span>
+        <span class="chip"><strong>PyMuPDF</strong> · page rendering</span>
+        <span class="chip"><strong>aiohttp</strong> · async server</span>
+        <span class="chip"><strong>Web Audio API</strong> · playback</span>
+      </div>
     </div>
-    <p style="color:var(--muted);font-size:.78rem;max-width:30rem;text-align:center">
-      Pick a single page — panels are detected on that page and the soundtrack
-      is generated panel by panel.
-    </p>
 
-    <button id="generate-btn" disabled>Generate Soundtrack</button>
+    <!-- Collaborators -->
+    <div class="section">
+      <div class="section-label">Made by</div>
+      <div class="collab-row">
+        <div class="collab">
+          <div class="avatar">D</div>
+          <div class="who"><span class="name">Dhananjay</span><span class="label">Collaborator</span></div>
+        </div>
+        <div class="collab">
+          <div class="avatar">J</div>
+          <div class="who"><span class="name">Julien</span><span class="label">Collaborator</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">Detect · Understand · Compose</div>
   </div>
 
   <!-- ── Screen 2: Progress ──────────────────────────────────────────── -->
   <div id="screen-progress" class="screen">
-    <h1>Comic Reader</h1>
+    <h1>C.O.S.M.I.C</h1>
     <div id="progress-header">
       <p id="progress-status-text">Analyzing pages…</p>
     </div>
