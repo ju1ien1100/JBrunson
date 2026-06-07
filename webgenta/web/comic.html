@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>C.O.S.M.I.C — COmic Soundtrack MusIc Composer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Bebas+Neue&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -23,7 +26,7 @@
     body {
       background: radial-gradient(1200px 800px at 70% -10%, #1b2a20 0%, var(--bg) 55%) fixed;
       color: var(--text);
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -40,15 +43,20 @@
     /* ── Upload screen ───────────────────────────────────────────────────── */
     #drop-zone {
       width: 100%;
-      border: 2px dashed var(--border);
-      border-radius: 10px;
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
       padding: 2.5rem;
       text-align: center;
       cursor: pointer;
       transition: border-color .2s, background .2s;
+      background-image: radial-gradient(var(--border) 1px, transparent 1px);
+      background-size: 20px 20px;
     }
-    #drop-zone.drag-over { border-color: var(--accent); background: #2a2f28; }
-    #drop-zone p { color: var(--muted); font-size: .95rem; }
+    #drop-zone.drag-over {
+      border-color: var(--accent);
+      background-image: radial-gradient(color-mix(in srgb, var(--accent) 60%, transparent) 1px, transparent 1px);
+    }
+    #drop-zone p { color: var(--muted); font-size: .92rem; }
     #drop-zone p strong { color: var(--text); }
     #drop-zone input[type=file] { display: none; }
 
@@ -63,7 +71,7 @@
       align-items: center;
     }
     #file-info.visible { display: flex; }
-    #file-icon { font-size: 1.8rem; }
+    #file-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; }
     #file-details { flex: 1; }
     #file-name { font-weight: 600; word-break: break-all; }
     #file-meta { color: var(--muted); font-size: .8rem; margin-top: .25rem; }
@@ -92,23 +100,35 @@
     button {
       background: var(--accent);
       border: none;
+      border-bottom: 2px solid #5f6e4d;
       color: #fff;
+      font-family: 'Space Grotesk', system-ui, sans-serif;
       font-size: .9rem;
       font-weight: 600;
       padding: .6rem 1.5rem;
       border-radius: 7px;
       cursor: pointer;
-      transition: background .15s, opacity .15s;
+      transition: background .15s, transform .1s, box-shadow .1s, opacity .15s;
     }
-    button:hover:not(:disabled) { background: #7a8a6a; }
+    button:hover:not(:disabled) {
+      background: #7a8a6a;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px -4px rgba(137,152,120,0.4);
+    }
+    button:active:not(:disabled) { transform: translateY(0); border-bottom-width: 1px; }
     button:disabled { opacity: .35; cursor: not-allowed; }
     button.secondary {
       background: var(--surface);
       border: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
       color: var(--text);
-      font-weight: 400;
+      font-weight: 500;
     }
-    button.secondary:hover:not(:disabled) { background: var(--border); }
+    button.secondary:hover:not(:disabled) {
+      background: var(--border);
+      box-shadow: none;
+      transform: none;
+    }
 
     /* ── Progress screen ─────────────────────────────────────────────────── */
     #progress-header { text-align: center; }
@@ -116,27 +136,36 @@
 
     #progress-table {
       width: 100%;
-      border-collapse: collapse;
+      border-collapse: separate;
+      border-spacing: 0 3px;
       font-size: .85rem;
     }
     #progress-table th {
       text-align: center;
-      padding: .5rem .75rem;
+      padding: .4rem .75rem .6rem;
       color: var(--muted);
       border-bottom: 1px solid var(--border);
-      font-weight: 500;
+      font-family: 'Bebas Neue', system-ui, sans-serif;
+      font-weight: 400;
+      font-size: .82rem;
+      letter-spacing: .15em;
     }
     #progress-table th:first-child { text-align: left; }
     #progress-table td {
       padding: .55rem .75rem;
-      border-bottom: 1px solid var(--border);
+      background: var(--surface);
       text-align: center;
     }
-    #progress-table td:first-child { text-align: left; color: var(--muted); font-size: .8rem; }
+    #progress-table td:first-child {
+      text-align: left; color: var(--muted); font-size: .8rem;
+      border-radius: 6px 0 0 6px;
+    }
+    #progress-table td:last-child { border-radius: 0 6px 6px 0; }
+    #progress-table tbody tr:hover td { background: #272d25; }
 
     .cell-dot {
       display: inline-block;
-      width: 10px; height: 10px;
+      width: 12px; height: 12px;
       border-radius: 50%;
       background: var(--border);
       transition: background .3s;
@@ -148,7 +177,8 @@
       animation: spin-pulse .8s infinite;
     }
     @keyframes spin-pulse {
-      0%,100% { opacity:1; } 50% { opacity:.3; }
+      0%,100% { opacity:1; transform: scale(1); }
+      50% { opacity:.35; transform: scale(0.75); }
     }
 
     #reader-unlock-banner {
@@ -223,11 +253,13 @@
       color: var(--muted);
       background: none;
       border: none;
+      border-bottom: none;
       cursor: pointer;
       text-decoration: underline;
       padding: 0;
+      transform: none; box-shadow: none;
     }
-    #back-to-upload:hover { color: var(--text); }
+    #back-to-upload:hover { color: var(--text); transform: none; box-shadow: none; }
 
     /* ── Shared error ────────────────────────────────────────────────────── */
     #conn-error {
@@ -262,7 +294,11 @@
     /* ── Piano bar (fixed bottom) ────────────────────────────────────────── */
     #piano-bar {
       position: fixed; bottom: 0; left: 0; right: 0;
-      background: var(--surface);
+      background: #191c19;
+      background-image: repeating-linear-gradient(
+        0deg, transparent, transparent 3px,
+        rgba(255,255,255,0.013) 3px, rgba(255,255,255,0.013) 4px
+      );
       border-top: 2px solid var(--border);
       padding: 0.4rem 1rem 0.5rem;
       z-index: 200;
@@ -297,10 +333,15 @@
     #piano-explore-btn {
       padding: 0.28rem 0.85rem; font-size: 0.78rem; font-weight: 600;
       border-radius: 5px; background: transparent;
-      border: 1px solid var(--border); color: var(--muted);
+      border: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      color: var(--muted);
       cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+      transform: none; box-shadow: none;
     }
-    #piano-explore-btn:hover { border-color: var(--accent); color: var(--text); }
+    #piano-explore-btn:hover {
+      border-color: var(--accent); color: var(--text);
+      transform: none; box-shadow: none;
+    }
     #piano-explore-btn.active {
       background: #1e2a1e; border-color: var(--accent); color: var(--accent-hi);
     }
@@ -313,9 +354,12 @@
     #piano-status.streaming  { background: #1e2a1e; color: var(--green); }
     #piano-status.error      { background: #2a1212; color: var(--red); }
     #piano-key-badge {
-      font-size: 0.68rem; font-weight: 600; letter-spacing: .04em;
+      display: inline-flex; align-items: center;
+      font-size: 0.66rem; font-weight: 600; letter-spacing: .12em;
       color: var(--accent-hi); background: var(--accent-dim);
-      border-radius: 4px; padding: 0.1rem 0.45rem;
+      border: 1px solid var(--border);
+      border-radius: 999px; padding: 0.18rem 0.65rem;
+      text-transform: uppercase;
     }
 
     #m-keyboard { position: relative; height: 80px; user-select: none; display: flex; touch-action: none; align-self: center; }
@@ -335,7 +379,7 @@
       z-index: 2; cursor: pointer; touch-action: none; transition: background .05s;
     }
     .key-black.active { background: #899878; }
-    .key-label { font-size: 9px; color: #899878; pointer-events: none; }
+    .key-label { font-size: 10px; color: #899878; pointer-events: none; }
     #piano-octave-row {
       display: flex; gap: 0.4rem; align-items: center;
       font-size: 0.7rem; color: var(--muted);
@@ -343,44 +387,64 @@
     #piano-octave-row button {
       width: 20px; height: 20px; padding: 0; font-size: 13px;
       border-radius: 3px; line-height: 1;
+      border-bottom: 1px solid #5f6e4d;
+      box-shadow: none;
     }
     .key-hint { font-size: 0.68rem; color: var(--muted); margin-left: 0.5rem; }
 
     /* ── Landing page (upload screen) ────────────────────────────────────── */
-    #screen-upload { max-width: 980px; gap: 0; padding-top: 3rem; }
+    #screen-upload { max-width: 1020px; gap: 0; padding-top: 3rem; }
+
+    .upload-screen-top {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3rem;
+      align-items: start;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 740px) {
+      .upload-screen-top { grid-template-columns: 1fr; }
+    }
 
     .hero {
-      text-align: center;
-      display: flex; flex-direction: column; align-items: center;
-      gap: 1.1rem; margin-bottom: 2.5rem;
+      text-align: left;
+      display: flex; flex-direction: column; align-items: flex-start;
+      gap: 1.1rem;
     }
     .kicker {
-      color: var(--accent); font-size: .72rem; letter-spacing: .34em;
-      text-transform: uppercase; font-weight: 600;
+      display: inline-flex; align-items: center;
+      background: var(--accent-dim); border: 1px solid var(--border);
+      border-radius: 999px; padding: 0.3rem 0.85rem;
+      font-size: .68rem; font-weight: 600; letter-spacing: .22em;
+      color: var(--accent-hi); text-transform: uppercase;
     }
     .hero-title {
-      font-size: clamp(2.6rem, 8vw, 5rem); font-weight: 800;
-      letter-spacing: .05em; line-height: 1;
-      background: linear-gradient(180deg, var(--text), var(--accent-hi));
-      -webkit-background-clip: text; background-clip: text; color: transparent;
+      font-family: 'Bebas Neue', system-ui, sans-serif;
+      font-size: clamp(3.5rem, 10vw, 6.5rem); font-weight: 400;
+      letter-spacing: .12em; line-height: 1;
+      color: var(--accent-hi);
     }
     .hero-sub {
-      font-size: 1.02rem; color: var(--accent-hi); font-weight: 500;
-      letter-spacing: .02em;
+      font-size: .95rem; color: var(--accent); font-weight: 500;
+      letter-spacing: .02em; border-left: 2px solid var(--accent);
+      padding-left: .85rem; line-height: 1.5;
     }
-    .hero-lead { color: var(--muted); font-size: 1.02rem; line-height: 1.65; max-width: 62ch; }
+    .hero-lead { color: var(--muted); font-size: .92rem; line-height: 1.7; max-width: 44ch; }
     .hero-lead strong { color: var(--text); font-weight: 600; }
 
     .section { width: 100%; margin-top: 3.5rem; }
     .section-label {
-      text-align: center; color: var(--muted); font-size: .72rem;
+      text-align: center; color: var(--muted); font-size: .68rem;
       letter-spacing: .28em; text-transform: uppercase; margin-bottom: 1.6rem;
+      font-family: 'Space Grotesk', sans-serif;
     }
 
     /* Upload card */
     .upload-card {
-      width: 100%; max-width: 640px; margin: 0 auto;
-      display: flex; flex-direction: column; gap: 1.1rem; align-items: center;
+      width: 100%;
+      display: flex; flex-direction: column; gap: 1.1rem; align-items: stretch;
+      padding-top: 0.5rem;
     }
 
     /* Featured tech (Magenta / Suno / Stability) */
@@ -389,20 +453,27 @@
     }
     @media (max-width: 760px) { .tech-grid { grid-template-columns: 1fr; } }
     .tech-card {
-      background: linear-gradient(160deg, var(--surface), #161519);
-      border: 1px solid var(--border); border-radius: 16px;
+      --card-color: var(--accent);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--card-color);
+      border-radius: 14px;
       padding: 1.5rem 1.4rem;
       display: flex; flex-direction: column; gap: .7rem;
-      transition: border-color .2s, transform .2s;
+      transition: box-shadow .25s;
     }
-    .tech-card:hover { border-color: var(--accent); transform: translateY(-3px); }
+    .tech-card:hover { box-shadow: 0 8px 36px -8px var(--card-color); }
+    .tech-card.stable { --card-color: #b888e8; }
+    .tech-card.melody { --card-color: #ff4db8; }
+    .tech-card.voice  { --card-color: #e0c074; }
     .tech-icon {
-      width: 48px; height: 48px; border-radius: 13px;
+      width: 56px; height: 56px; border-radius: 14px;
       display: flex; align-items: center; justify-content: center;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
     }
     .tech-card .role {
-      font-size: .68rem; letter-spacing: .14em; text-transform: uppercase;
-      color: var(--accent); font-weight: 700;
+      font-size: .68rem; letter-spacing: .16em; text-transform: uppercase;
+      color: var(--card-color); font-weight: 700;
     }
     .tech-card h3 { font-size: 1.02rem; font-weight: 700; }
     .tech-card h3 span { color: var(--muted); font-weight: 400; font-size: .82rem; }
@@ -423,13 +494,16 @@
     .collab {
       display: flex; align-items: center; gap: .85rem;
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 14px; padding: .85rem 1.5rem .85rem .85rem;
+      border-radius: 10px; padding: .85rem 1.5rem .85rem .85rem;
     }
     .collab .avatar {
-      width: 44px; height: 44px; border-radius: 50%;
+      width: 42px; height: 42px; border-radius: 6px;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 1.05rem; color: var(--bg);
-      background: linear-gradient(135deg, var(--accent), var(--accent-hi));
+      font-family: 'Bebas Neue', system-ui, sans-serif;
+      font-size: 1.15rem; letter-spacing: .05em; color: var(--accent-hi);
+      background: var(--bg);
+      border: 1px solid var(--accent);
+      box-shadow: 2px 2px 0 var(--border);
     }
     .collab .who { display: flex; flex-direction: column; }
     .collab .who .name { font-weight: 600; font-size: .95rem; }
@@ -443,16 +517,17 @@
   <!-- ── Screen 1: Landing / Upload ───────────────────────────────────── -->
   <div id="screen-upload" class="screen active">
 
+    <!-- Hero + Upload (2-column grid) -->
+    <div class="upload-screen-top">
+
     <!-- Hero -->
     <div class="hero">
       <div class="kicker">COmic Soundtrack MusIc Composer</div>
       <div class="hero-title">C.O.S.M.I.C</div>
       <div class="hero-sub">Give silent comics a soundtrack — one panel at a time.</div>
       <p class="hero-lead">
-        An immersive webtoon / manga audio system. Drop in a page and C.O.S.M.I.C uses
-        <strong>vision</strong> to detect every panel and read its mood &amp; dialogue, then
-        composes a synchronized <strong>three-layer soundtrack</strong> — background ambience,
-        a melodic motif, and spoken voice-over — that plays as each panel fades in.
+        Drop a manga or webtoon page. <strong>Vision</strong> reads every panel's mood and dialogue,
+        then composes a <strong>three-layer soundtrack</strong> that plays as each panel reveals.
       </p>
     </div>
 
@@ -464,7 +539,14 @@
       </div>
 
       <div id="file-info">
-        <div id="file-icon">📄</div>
+        <div id="file-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="8" y1="13" x2="16" y2="13"/>
+            <line x1="8" y1="17" x2="13" y2="17"/>
+          </svg>
+        </div>
         <div id="file-details">
           <div id="file-name"></div>
           <div id="file-meta"></div>
@@ -484,13 +566,15 @@
       <button id="generate-btn" disabled>Generate Soundtrack</button>
     </div>
 
+    </div><!-- /.upload-screen-top -->
+
     <!-- Featured generative models -->
     <div class="section">
       <div class="section-label">Three layers · three generative models</div>
       <div class="tech-grid">
 
         <!-- Stable Audio 3 — Stability AI -->
-        <div class="tech-card">
+        <div class="tech-card stable">
           <div class="tech-icon" style="background:rgba(160,106,217,.16)">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#b888e8"
                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -505,7 +589,7 @@
         </div>
 
         <!-- Magenta RT2 — Google -->
-        <div class="tech-card">
+        <div class="tech-card melody">
           <div class="tech-icon" style="background:rgba(255,77,184,.14)">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#ff4db8"
                  stroke-width="2" stroke-linecap="round">
@@ -521,7 +605,7 @@
         </div>
 
         <!-- Suno -->
-        <div class="tech-card">
+        <div class="tech-card voice">
           <div class="tech-icon" style="background:rgba(217,180,106,.14)">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#e0c074"
                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
