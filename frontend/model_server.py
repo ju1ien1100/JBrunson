@@ -64,15 +64,19 @@ SUNO_POLL_INTERVAL = 3.0
 SUNO_POLL_TIMEOUT = 180.0
 ANIME_VOICE_STYLE = (
     "spoken word, solo, voice only, no instruments, no background music, no beat, "
-    "spoken word, anime female voice, kawaii, clear speech, dry vocal"
+    "spoken word, anime voice, clear speech, dry vocal"
 )
-ANIME_VOICE_ID = "5b915c6d-8d96-416c-9755-eba65868cfef"
+# Suno preset voice IDs (only these three are supported)
+VOICE_FEMALE  = "5b915c6d-8d96-416c-9755-eba65868cfef"  # female voice
+VOICE_KID     = "c036ce3a-55e4-4690-9b8d-4516b37a96d5"  # weird kid voice
+VOICE_MALE    = "27f5465b-73c3-4134-b11e-70b0bd571c6c"  # low male voice
+VOICE_DEFAULT = VOICE_FEMALE
 VISION_MODEL = "claude-haiku-4-5"
 PANEL_VISION_MODEL = "claude-sonnet-4-6"  # higher-capability model for panel boundary detection
 FIRST_BATCH = 3  # pages needed before reader unlocks; rest generate in background
 VISION_SYSTEM = (
     "You score a single comic/manga/book page for a three-layer audio engine. "
-    "Look at the art and any text, then produce all four fields:\n"
+    "Look at the art and any text, then produce all five fields:\n"
     "READING ORDER: First infer the layout direction. Manga and Japanese comics "
     "are read RIGHT-TO-LEFT, top-to-bottom — start at the top-right panel/bubble "
     "and move leftward, then down. Western comics are read left-to-right. Use the "
@@ -84,6 +88,12 @@ VISION_SYSTEM = (
     "suno_lyrics: Dialogue extracted verbatim from speech bubbles, in reading "
     "order, newline-separated. Preserve the original language. Empty string if no "
     "readable dialogue.\n"
+    "suno_voice_id: Choose the voice that best matches the dominant speaking "
+    "character on this panel. Options:\n"
+    f"  {VOICE_FEMALE} — female voice (default for women, girls, feminine characters)\n"
+    f"  {VOICE_KID}    — weird kid voice (children, comic-relief, young/quirky characters)\n"
+    f"  {VOICE_MALE}   — low male voice (men, older characters, deep/authoritative voices)\n"
+    "Pick whichever fits the speaker. If there is no dialogue, still return a voice_id.\n"
     "reason: Brief justification."
 )
 MOODS = ("calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral")
@@ -288,9 +298,10 @@ async def _gen_suno(pdf_n: int) -> None:
         await _broadcast({"type": "progress", "pdf_page": pdf_n, "track": "suno", "done": True})
         return
 
-    print(f"[p{pdf_n}] suno: submitting voice track…", flush=True)
+    voice_id = _state["page_data"][pdf_n].get("suno_voice_id", VOICE_DEFAULT)
+    print(f"[p{pdf_n}] suno: submitting voice track (voice={voice_id[:8]}…)…", flush=True)
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {"style": ANIME_VOICE_STYLE, "lyrics": lyrics, "voice_id": ANIME_VOICE_ID}
+    payload = {"style": ANIME_VOICE_STYLE, "lyrics": lyrics, "voice_id": voice_id}
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -362,12 +373,15 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
     import anthropic
     from pydantic import BaseModel
 
+    _VALID_VOICE_IDS = {VOICE_FEMALE, VOICE_KID, VOICE_MALE}
+
     class PageMusic(BaseModel):
         stable_audio_prompt: str
         magenta_mood: Literal[
             "calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral"
         ]
         suno_lyrics: str
+        suno_voice_id: str
         reason: str
 
     client = anthropic.Anthropic()
@@ -391,11 +405,13 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
             output_format=PageMusic,
         )
         pm = resp.parsed_output
+        voice_id = pm.suno_voice_id if pm.suno_voice_id in _VALID_VOICE_IDS else VOICE_DEFAULT
         return {
             "page_number": pnum,
             "stable_audio_prompt": pm.stable_audio_prompt.strip() or "ambient background music",
             "magenta_mood": pm.magenta_mood,
             "suno_lyrics": pm.suno_lyrics.strip(),
+            "suno_voice_id": voice_id,
             "reason": pm.reason,
         }
 
