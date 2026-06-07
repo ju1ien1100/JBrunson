@@ -264,30 +264,45 @@
       position: fixed; bottom: 0; left: 0; right: 0;
       background: var(--surface);
       border-top: 2px solid var(--border);
-      padding: 0.45rem 1rem 0.55rem;
+      padding: 0.4rem 1rem 0.5rem;
       z-index: 200;
-      display: flex; flex-direction: column; gap: 0.35rem;
+      display: flex; flex-direction: column; gap: 0.3rem;
     }
     #piano-controls {
-      display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;
-      font-size: 0.78rem;
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 0.5rem;
     }
-    #piano-controls select, #piano-controls input[type=text] {
+    #piano-transport {
+      display: flex; align-items: center; gap: 0.45rem; flex-shrink: 0;
+    }
+    #piano-tweaks {
+      display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    #piano-tweaks select {
       background: var(--bg); border: 1px solid var(--border);
-      color: var(--text); border-radius: 4px; padding: 0.3rem 0.5rem;
-      font-size: 0.78rem; font-family: inherit;
+      color: var(--text); border-radius: 4px; padding: 0.25rem 0.5rem;
+      font-size: 0.75rem; font-family: inherit; max-width: 150px;
     }
-    #piano-controls select:focus, #piano-controls input[type=text]:focus {
-      outline: none; border-color: var(--accent-hi);
-    }
-    #piano-controls label {
+    #piano-tweaks select:focus { outline: none; border-color: var(--accent-hi); }
+    #piano-tweaks label {
       display: flex; align-items: center; gap: 0.3rem;
-      color: var(--muted); white-space: nowrap;
+      color: var(--muted); white-space: nowrap; font-size: 0.75rem;
     }
-    #piano-controls input[type=range] { width: 80px; accent-color: var(--accent); }
+    #piano-tweaks input[type=range] { width: 70px; accent-color: var(--accent); }
     #piano-play-btn {
-      padding: 0.3rem 0.9rem; font-size: 0.78rem; font-weight: 700;
+      padding: 0.28rem 0.85rem; font-size: 0.78rem; font-weight: 700;
       border-radius: 5px;
+    }
+    #piano-explore-btn {
+      padding: 0.28rem 0.85rem; font-size: 0.78rem; font-weight: 600;
+      border-radius: 5px; background: transparent;
+      border: 1px solid var(--border); color: var(--muted);
+      cursor: pointer; transition: border-color .15s, color .15s, background .15s;
+    }
+    #piano-explore-btn:hover { border-color: var(--accent); color: var(--text); }
+    #piano-explore-btn.active {
+      background: #1e2a1e; border-color: var(--accent); color: var(--accent-hi);
     }
     #piano-status {
       font-size: 0.72rem; color: var(--muted);
@@ -297,6 +312,11 @@
     #piano-status.connecting { background: #2a2510; color: #c8a84b; }
     #piano-status.streaming  { background: #1e2a1e; color: var(--green); }
     #piano-status.error      { background: #2a1212; color: var(--red); }
+    #piano-key-badge {
+      font-size: 0.68rem; font-weight: 600; letter-spacing: .04em;
+      color: var(--accent-hi); background: var(--accent-dim);
+      border-radius: 4px; padding: 0.1rem 0.45rem;
+    }
 
     #m-keyboard { position: relative; height: 80px; user-select: none; display: flex; touch-action: none; align-self: center; }
     .key-white {
@@ -613,20 +633,25 @@
   <!-- ── Piano bar (always visible) ───────────────────────────────────── -->
   <div id="piano-bar">
     <div id="piano-controls">
-      <select id="m-preset-select" title="Style preset"></select>
-      <label>CFG <input id="m-cfg-range" type="range" min="1" max="7" step="0.5" value="5" title="Style adherence"></label>
-      <label>Vol <input id="m-vol-range" type="range" min="0" max="100" value="70"></label>
-      <label><input id="m-strum-chk" type="checkbox"> Strum</label>
-      <select id="m-midi-select" title="MIDI input"><option value="">— MIDI —</option></select>
-      <button id="piano-play-btn">▶ Play</button>
-      <span id="piano-status">Idle</span>
+      <div id="piano-transport">
+        <button id="piano-play-btn">▶ Play</button>
+        <button id="piano-explore-btn">⊙ Explore</button>
+        <span id="piano-status">Idle</span>
+      </div>
+      <div id="piano-tweaks">
+        <select id="m-preset-select" title="Style"></select>
+        <label>Vol <input id="m-vol-range" type="range" min="0" max="100" value="70"></label>
+        <label>CFG <input id="m-cfg-range" type="range" min="1" max="7" step="0.5" value="5"></label>
+        <label><input id="m-strum-chk" type="checkbox"> Strum</label>
+      </div>
     </div>
     <div id="m-keyboard"></div>
     <div id="piano-octave-row">
       <button id="m-oct-dn">−</button>
       <span id="m-octave-label">C3</span>
       <button id="m-oct-up">+</button>
-      <span class="key-hint">A S D F G H J K — white keys · W E T Y U — black keys · Z/X — octave</span>
+      <span id="piano-key-badge" style="display:none"></span>
+      <span class="key-hint">a–l · w e t y u — black · z/x — octave</span>
     </div>
   </div>
 
@@ -931,6 +956,7 @@
           if (idx + 1 < pdfPageList.length) setDotState(pdfPageList[idx + 1], "analyzed", "spin");
         }
         mPanelMoods[msg.pdf_page] = msg.mood;
+        if (msg.music_key) mPanelKeys[msg.pdf_page] = { key: msg.music_key, scale: msg.music_scale, bpm: msg.tempo_bpm };
         updateProgressStatus();
         return;
       }
@@ -1011,6 +1037,10 @@
 
     function requestPanel(i) {
       if (i >= panelTotal) { finishReader(); return; }
+      // Reset explore mode silently (don't trigger the Continue logic)
+      mExploreMode = false;
+      mExploreBtn.classList.remove('active');
+      mExploreBtn.textContent = '⊙ Explore';
       curPanel = i;
       pageCounter.textContent = `Panel ${i + 1} / ${panelTotal}`;
       _pendingUrls = { bg: null, melody: null, voice: null };
@@ -1033,6 +1063,15 @@
           mCurrentPrompt = preset;
           mSend('prompt', { text: preset });
         }
+      }
+      // Remap piano to the panel's detected key/scale
+      const kd = mPanelKeys[curPanel + 1];
+      if (kd?.key && kd?.scale) {
+        mSetKeyScale(kd.key, kd.scale);
+      } else {
+        mScalePitches = null;
+        mKeyBadge.style.display = 'none';
+        mUpdateOctave();
       }
       playPanelAndAdvance(_pendingUrls);
     }
@@ -1081,6 +1120,9 @@
       stopAll();
       pageCounter.textContent = `Done · ${panelTotal} panel${panelTotal === 1 ? "" : "s"}`;
       replayBtn.style.display = "inline-block";
+      mScalePitches = null;
+      mKeyBadge.style.display = 'none';
+      mUpdateOctave();
     }
 
     function stopAll() {
@@ -1182,6 +1224,22 @@ registerProcessor('mrt2-processor', MRT2Processor);
       'reggae','metal','bossa nova','bluegrass',
     ];
 
+    // Musical key/scale lookup tables for per-panel piano remapping
+    const KEY_ROOTS = {
+      'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,
+      'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,
+      'A':9,'A#':10,'Bb':10,'B':11,
+    };
+    const SCALE_INTERVALS = {
+      major:            [0,2,4,5,7,9,11],
+      minor:            [0,2,3,5,7,8,10],
+      dorian:           [0,2,3,5,7,9,10],
+      pentatonic_major: [0,2,4,7,9],
+      pentatonic_minor: [0,3,5,7,10],
+    };
+    let mScalePitches = null;   // null = chromatic mode; array = in-scale mode
+    const mPanelKeys  = {};     // pdf_page → { key, scale, bpm }
+
     // Key layout
     let mOctaveBase = 48; // C3
     const M_WHITE_KEYS    = ['a','s','d','f','g','h','j','k','l'];
@@ -1192,6 +1250,10 @@ registerProcessor('mrt2-processor', MRT2Processor);
     const M_NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
     function mKeyToMidi(k) {
+      if (mScalePitches) {
+        const wi = M_WHITE_KEYS.indexOf(k);
+        return (wi >= 0 && wi < mScalePitches.length) ? mScalePitches[wi] : -1;
+      }
       const wi = M_WHITE_KEYS.indexOf(k);
       if (wi >= 0) return mOctaveBase + M_WHITE_OFFSETS[wi];
       const bi = M_BLACK_KEYS.indexOf(k);
@@ -1211,9 +1273,10 @@ registerProcessor('mrt2-processor', MRT2Processor);
     const mCfgRange    = document.getElementById('m-cfg-range');
     const mVolRange    = document.getElementById('m-vol-range');
     const mStrumChk    = document.getElementById('m-strum-chk');
-    const mMidiSel     = document.getElementById('m-midi-select');
     const mPlayBtn     = document.getElementById('piano-play-btn');
+    const mExploreBtn  = document.getElementById('piano-explore-btn');
     const mStatusBadge = document.getElementById('piano-status');
+    const mKeyBadge    = document.getElementById('piano-key-badge');
 
     function mSetStatus(cls, text) {
       mStatusBadge.className = cls;
@@ -1247,6 +1310,7 @@ registerProcessor('mrt2-processor', MRT2Processor);
       mKeyboard.querySelectorAll(`[data-note="${n}"]`).forEach(e => e.classList.add('active'));
       if (!mConnected) mPlayBtn.click();
       mSend('note_on', { pitch: n, velocity: 100 });
+      mPauseMelody();
       mUpdateGain();
     }
     function mNoteOff(n) {
@@ -1284,46 +1348,38 @@ registerProcessor('mrt2-processor', MRT2Processor);
     document.getElementById('m-oct-dn').addEventListener('click', () => { mOctaveBase = Math.max(24, mOctaveBase - 12); mUpdateOctave(); });
     document.getElementById('m-oct-up').addEventListener('click', () => { mOctaveBase = Math.min(84, mOctaveBase + 12); mUpdateOctave(); });
 
-    // MIDI
-    let mMidiAccess = null;
-    async function mInitMidi() {
-      if (!navigator.requestMIDIAccess) return;
-      try {
-        mMidiAccess = await navigator.requestMIDIAccess();
-        mPopulateMidi();
-        mMidiAccess.onstatechange = mPopulateMidi;
-      } catch { console.warn('Web MIDI unavailable'); }
+    // ── Melody-pause-on-play (10 s debounce) ─────────────────────────────
+    let mMelodyResumeTimer = null;
+
+    function mPauseMelody() {
+      if (!melodyAudio.paused) melodyAudio.pause();
+      clearTimeout(mMelodyResumeTimer);
+      mMelodyResumeTimer = setTimeout(() => {
+        mMelodyResumeTimer = null;
+        if (!mExploreMode && melodyAudio.src && melodyAudio.paused)
+          melodyAudio.play().catch(() => {});
+      }, 10000);
     }
-    function mPopulateMidi() {
-      if (!mMidiAccess) return;
-      const prev = mMidiSel.value;
-      mMidiSel.innerHTML = '<option value="">— MIDI —</option>';
-      mMidiAccess.inputs.forEach(inp => {
-        const o = document.createElement('option');
-        o.value = inp.id; o.textContent = inp.name ?? inp.id;
-        mMidiSel.appendChild(o);
-      });
-      mMidiSel.value = prev;
-      mBindMidi();
-    }
-    function mBindMidi() {
-      if (!mMidiAccess) return;
-      mMidiAccess.inputs.forEach(inp => {
-        inp.onmidimessage = mMidiSel.value === inp.id ? mOnMidi : null;
-      });
-    }
-    mMidiSel.addEventListener('change', mBindMidi);
-    function mOnMidi(e) {
-      const [status, pitch, velocity] = e.data;
-      const type = status & 0xf0;
-      const isDrum = (status & 0x0f) === 9;
-      if (type === 0x90 && velocity > 0) {
-        if (isDrum) mSend('drum', { velocity });
-        else mNoteOn(pitch);
-      } else if (type === 0x80 || (type === 0x90 && velocity === 0)) {
-        if (!isDrum) mNoteOff(pitch);
+
+    // ── Explore mode ─────────────────────────────────────────────────────
+    let mExploreMode = false;
+
+    function mSetExplore(on) {
+      mExploreMode = on;
+      mExploreBtn.classList.toggle('active', on);
+      mExploreBtn.textContent = on ? '▶ Continue' : '⊙ Explore';
+      if (on) {
+        clearTimeout(advanceTimer);
+        clearTimeout(mMelodyResumeTimer); mMelodyResumeTimer = null;
+        melodyAudio.pause();
+        voiceAudio.pause();
+      } else {
+        stopAll();
+        requestPanel(curPanel + 1);
       }
     }
+
+    mExploreBtn.addEventListener('click', () => mSetExplore(!mExploreMode));
 
     // Piano keyboard rendering
     function mBuildKeyboard() {
@@ -1355,6 +1411,45 @@ registerProcessor('mrt2-processor', MRT2Processor);
         el.addEventListener('pointerout',  () => mNoteOff(+el.dataset.note));
       });
     }
+
+    function mBuildScaleKeyboard(pitches) {
+      mKeyboard.innerHTML = '';
+      pitches.forEach(note => {
+        const pc = note % 12;
+        const el = document.createElement('div');
+        el.className = 'key-white'; el.dataset.note = note;
+        el.innerHTML = `<span class="key-label">${M_NOTE_NAMES[pc]}${Math.floor(note/12)-1}</span>`;
+        mKeyboard.appendChild(el);
+        el.addEventListener('pointerdown', e => { e.preventDefault(); mNoteOn(note); });
+        el.addEventListener('pointerup',   () => mNoteOff(note));
+        el.addEventListener('pointerout',  () => mNoteOff(note));
+      });
+    }
+
+    function mSetKeyScale(key, scale) {
+      const root = KEY_ROOTS[key] ?? 0;
+      const ivs  = SCALE_INTERVALS[scale] ?? SCALE_INTERVALS.major;
+      const baseOct = Math.floor(mOctaveBase / 12) * 12;
+      const pitches = [];
+      let oct = baseOct;
+      while (pitches.length < 9) {
+        for (const iv of ivs) {
+          if (pitches.length >= 9) break;
+          pitches.push(oct + root + iv);
+        }
+        oct += 12;
+      }
+      mScalePitches = pitches;
+      mBuildScaleKeyboard(pitches);
+      // Octave label shows root note (e.g. "A3") not the chromatic base C
+      const rootOctave = Math.floor(pitches[0] / 12) - 1;
+      mOctLabel.textContent = `${key}${rootOctave}`;
+      // Show key/scale badge
+      const scaleLabel = scale.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+      mKeyBadge.textContent = `${key} ${scaleLabel}`;
+      mKeyBadge.style.display = '';
+    }
+
 
     // Preset loading
     function mPopulatePresets() {
@@ -1446,7 +1541,6 @@ registerProcessor('mrt2-processor', MRT2Processor);
     // Init
     mPopulatePresets();
     mUpdateOctave();
-    mInitMidi();
   </script>
 </body>
 </html>

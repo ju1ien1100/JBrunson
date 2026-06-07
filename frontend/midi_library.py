@@ -97,6 +97,31 @@ def melody_for_mood(mood: str) -> list:
     return build_segments(MELODY_LIBRARY.get(mood, MELODY_LIBRARY["neutral"]))
 
 
+# ── Key transposition helpers ─────────────────────────────────────────────────
+
+KEY_SEMITONES: dict[str, int] = {
+    "C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3,
+    "E": 4, "F": 5, "F#": 6, "Gb": 6, "G": 7, "G#": 8, "Ab": 8,
+    "A": 9, "A#": 10, "Bb": 10, "B": 11,
+}
+
+
+def transpose_segments(segments: list, semitones: int) -> list:
+    """Shift all note onsets/holds in a segment list by `semitones`."""
+    if semitones == 0:
+        return segments
+    out = []
+    for seg in segments:
+        new_notes = [0] * 128
+        for i, v in enumerate(seg["notes"]):
+            if v > 0:
+                j = i + semitones
+                if 0 <= j < 128:
+                    new_notes[j] = v
+        out.append({**seg, "notes": new_notes})
+    return out
+
+
 def motif_to_note_events(motif: list, frame_ms: int = FRAME_MS) -> list:
     """Convert a motif into a plain [(pitch, start_s, duration_s)] note list.
 
