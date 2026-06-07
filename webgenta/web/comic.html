@@ -8,15 +8,16 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0a0a0a;
-      --surface: #141420;
-      --border: #2a2a4a;
-      --accent: #7c3aed;
-      --accent-dim: #4c1d95;
-      --text: #e5e5e5;
-      --muted: #888;
-      --green: #22c55e;
-      --red: #f87171;
+      --bg:        #121113;  /* Onyx */
+      --surface:   #222725;  /* Carbon Black */
+      --border:    #2e332d;
+      --accent:    #899878;  /* Palm Leaf */
+      --accent-hi: #e4e6c3;  /* Beige */
+      --accent-dim:#2e332d;
+      --text:      #f7f7f2;  /* Porcelain */
+      --muted:     #899878;  /* Palm Leaf */
+      --green:     #e4e6c3;  /* Beige */
+      --red:       #f87171;
     }
 
     body {
@@ -27,6 +28,7 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      padding-bottom: 240px;
     }
 
     /* ── Screens ─────────────────────────────────────────────────────────── */
@@ -45,7 +47,7 @@
       cursor: pointer;
       transition: border-color .2s, background .2s;
     }
-    #drop-zone.drag-over { border-color: var(--accent); background: #1a1030; }
+    #drop-zone.drag-over { border-color: var(--accent); background: #2a2f28; }
     #drop-zone p { color: var(--muted); font-size: .95rem; }
     #drop-zone p strong { color: var(--text); }
     #drop-zone input[type=file] { display: none; }
@@ -98,7 +100,7 @@
       cursor: pointer;
       transition: background .15s, opacity .15s;
     }
-    button:hover:not(:disabled) { background: #6d28d9; }
+    button:hover:not(:disabled) { background: #7a8a6a; }
     button:disabled { opacity: .35; cursor: not-allowed; }
     button.secondary {
       background: var(--surface);
@@ -106,7 +108,7 @@
       color: var(--text);
       font-weight: 400;
     }
-    button.secondary:hover:not(:disabled) { background: #1e1e38; }
+    button.secondary:hover:not(:disabled) { background: var(--border); }
 
     /* ── Progress screen ─────────────────────────────────────────────────── */
     #progress-header { text-align: center; }
@@ -127,7 +129,7 @@
     #progress-table th:first-child { text-align: left; }
     #progress-table td {
       padding: .55rem .75rem;
-      border-bottom: 1px solid #1a1a2a;
+      border-bottom: 1px solid var(--border);
       text-align: center;
     }
     #progress-table td:first-child { text-align: left; color: var(--muted); font-size: .8rem; }
@@ -136,7 +138,7 @@
       display: inline-block;
       width: 10px; height: 10px;
       border-radius: 50%;
-      background: #2a2a3a;
+      background: var(--border);
       transition: background .3s;
     }
     .cell-dot.done  { background: var(--green); }
@@ -246,10 +248,83 @@
     #panel-masks { position: absolute; inset: 0; pointer-events: none; }
     .panel-mask {
       position: absolute;
-      background: #0a0a0a;
+      background: var(--bg);
       transition: opacity .7s ease;
     }
     .panel-mask.revealed { opacity: 0; }
+    .panel-mask.current {
+      outline: 3px solid var(--accent);
+      outline-offset: -2px;
+      z-index: 3;
+      pointer-events: none;
+    }
+
+    /* ── Piano bar (fixed bottom) ────────────────────────────────────────── */
+    #piano-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-top: 2px solid var(--border);
+      padding: 0.45rem 1rem 0.55rem;
+      z-index: 200;
+      display: flex; flex-direction: column; gap: 0.35rem;
+    }
+    #piano-controls {
+      display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;
+      font-size: 0.78rem;
+    }
+    #piano-controls select, #piano-controls input[type=text] {
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); border-radius: 4px; padding: 0.3rem 0.5rem;
+      font-size: 0.78rem; font-family: inherit;
+    }
+    #piano-controls select:focus, #piano-controls input[type=text]:focus {
+      outline: none; border-color: var(--accent-hi);
+    }
+    #piano-controls label {
+      display: flex; align-items: center; gap: 0.3rem;
+      color: var(--muted); white-space: nowrap;
+    }
+    #piano-controls input[type=range] { width: 80px; accent-color: var(--accent); }
+    #piano-play-btn {
+      padding: 0.3rem 0.9rem; font-size: 0.78rem; font-weight: 700;
+      border-radius: 5px;
+    }
+    #piano-status {
+      font-size: 0.72rem; color: var(--muted);
+      padding: 0.2rem 0.5rem; border-radius: 99px;
+      background: var(--border);
+    }
+    #piano-status.connecting { background: #2a2510; color: #c8a84b; }
+    #piano-status.streaming  { background: #1e2a1e; color: var(--green); }
+    #piano-status.error      { background: #2a1212; color: var(--red); }
+
+    #m-keyboard { position: relative; height: 80px; user-select: none; display: flex; touch-action: none; align-self: center; }
+    .key-white {
+      width: 42px; height: 80px;
+      background: #f7f7f2; border: 1px solid #899878;
+      border-radius: 0 0 5px 5px; flex-shrink: 0;
+      cursor: pointer; position: relative; touch-action: none;
+      display: flex; align-items: flex-end; justify-content: center;
+      padding-bottom: 5px; transition: background .05s;
+    }
+    .key-white.active { background: #e4e6c3; }
+    .key-black {
+      width: 26px; height: 50px;
+      background: #222725; border: 1px solid #121113;
+      border-radius: 0 0 4px 4px; position: absolute; top: 0;
+      z-index: 2; cursor: pointer; touch-action: none; transition: background .05s;
+    }
+    .key-black.active { background: #899878; }
+    .key-label { font-size: 9px; color: #899878; pointer-events: none; }
+    #piano-octave-row {
+      display: flex; gap: 0.4rem; align-items: center;
+      font-size: 0.7rem; color: var(--muted);
+    }
+    #piano-octave-row button {
+      width: 20px; height: 20px; padding: 0; font-size: 13px;
+      border-radius: 3px; line-height: 1;
+    }
+    .key-hint { font-size: 0.68rem; color: var(--muted); margin-left: 0.5rem; }
   </style>
 </head>
 <body>
@@ -341,10 +416,32 @@
   <audio id="melody-audio"></audio>
   <audio id="voice-audio"></audio>
 
+  <!-- ── Piano bar (always visible) ───────────────────────────────────── -->
+  <div id="piano-bar">
+    <div id="piano-controls">
+      <select id="m-preset-select" title="Style preset"></select>
+      <label>CFG <input id="m-cfg-range" type="range" min="1" max="7" step="0.5" value="5" title="Style adherence"></label>
+      <label>Vol <input id="m-vol-range" type="range" min="0" max="100" value="70"></label>
+      <label><input id="m-strum-chk" type="checkbox"> Strum</label>
+      <select id="m-midi-select" title="MIDI input"><option value="">— MIDI —</option></select>
+      <button id="piano-play-btn">▶ Play</button>
+      <span id="piano-status">Idle</span>
+    </div>
+    <div id="m-keyboard"></div>
+    <div id="piano-octave-row">
+      <button id="m-oct-dn">−</button>
+      <span id="m-octave-label">C3</span>
+      <button id="m-oct-up">+</button>
+      <span class="key-hint">A S D F G H J K — white keys · W E T Y U — black keys · Z/X — octave</span>
+    </div>
+  </div>
+
   <script>
     // ── Config ──────────────────────────────────────────────────────────────
-    const WS_URL  = `ws://${location.host}/ws`;
-    const API     = `http://${location.host}`;
+    const MODEL_SERVER   = `${location.hostname}:8766`;
+    const WS_URL         = `ws://${MODEL_SERVER}/ws`;        // comic reader → model_server.py
+    const MAGENTA_WS_URL = `ws://${location.hostname}:8765`; // piano → ws_server.py
+    const API            = `http://${MODEL_SERVER}`;
 
     // ── DOM refs ─────────────────────────────────────────────────────────────
     const screens = {
@@ -383,14 +480,14 @@
     const bgAudio     = document.getElementById("bg-audio");
     const melodyAudio = document.getElementById("melody-audio");
     const voiceAudio  = document.getElementById("voice-audio");
-    bgAudio.volume    = 0.3;
-    melodyAudio.volume= 0.6;
-    voiceAudio.volume = 1.0;
+    bgAudio.volume    = 0.05;
+    melodyAudio.volume= 0.4;
+    voiceAudio.volume = 0.25;
 
     // Panel timing: a panel lasts as long as its spoken text (voice), then a
     // short tail. Music tracks play underneath but do NOT extend the panel.
     const PANEL_TAIL_MS = 3000;        // linger 3s after the text/voice finishes
-    const PANEL_NO_TEXT_MS = 5000;     // no text/voice → default 5s
+    const PANEL_NO_TEXT_MS = 12000;    // no text/voice → default 12s
     const PANEL_SAFETY_CAP_MS = 60000; // safety if a voice 'ended' never fires
 
     // ── State ────────────────────────────────────────────────────────────────
@@ -403,6 +500,7 @@
 
     // Panel reveal state
     let panels       = [];   // [{order, box}]
+    const mPanelMoods = {}; // 1-based panel number → mood (from 'analyzed' events)
     let panelTotal   = 0;
     let curPanel     = 0;    // 0-based index of the panel being shown
     let maskEls      = [];   // overlay divs, one per panel
@@ -638,6 +736,7 @@
           const idx = pdfPageList.indexOf(pnum);
           if (idx + 1 < pdfPageList.length) setDotState(pdfPageList[idx + 1], "analyzed", "spin");
         }
+        mPanelMoods[msg.pdf_page] = msg.mood;
         updateProgressStatus();
         return;
       }
@@ -733,14 +832,25 @@
     function onPanelAudioReady() {
       genBadge.classList.remove("visible");
       revealPanel(curPanel);
+      if (mConnected) {
+        const mood = mPanelMoods[curPanel + 1];
+        if (mood && PIANO_MOOD_PRESET[mood]) {
+          const preset = PIANO_MOOD_PRESET[mood];
+          mPresetSel.value = preset;
+          mCurrentPrompt = preset;
+          mSend('prompt', { text: preset });
+        }
+      }
       playPanelAndAdvance(_pendingUrls);
     }
 
     function revealPanel(i) {
       const m = maskEls[i];
       if (!m) return;
+      maskEls.forEach(el => el.classList.remove('current'));
       m.classList.add("revealed");
-      m.scrollIntoView({ behavior: "smooth", block: "center" });
+      m.classList.add('current');
+      m.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
 
     function playPanelAndAdvance(urls) {
@@ -825,6 +935,325 @@
 
     // Connect WS on load to get current server status (idle by default)
     connectWs();
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ── Piano bar: Magenta RT2 real-time MIDI performance ─────────────────
+    // Separate WebSocket from the comic reader — both connect to ws_server.py
+    // but create independent sessions. Magenta streams binary PCM; comic
+    // streams track audio blobs. Keeping them on separate sockets avoids
+    // ambiguous binary frame demuxing.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    const PIANO_WORKLET_SRC = `
+const RING = 48000 * 4;
+class MRT2Processor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.ringL = new Float32Array(RING);
+    this.ringR = new Float32Array(RING);
+    this.w = 0; this.r = 0;
+    this.port.onmessage = ({ data }) => {
+      const chunk = data, frames = chunk.length >> 1;
+      for (let i = 0; i < frames; i++) {
+        this.ringL[this.w % RING] = chunk[i * 2];
+        this.ringR[this.w % RING] = chunk[i * 2 + 1];
+        this.w++;
+      }
+    };
+  }
+  process(_i, outputs) {
+    const L = outputs[0]?.[0], R = outputs[0]?.[1];
+    if (!L) return true;
+    const n = L.length, avail = this.w - this.r;
+    if (avail < n) { L.fill(0); R && R.fill(0); return true; }
+    for (let i = 0; i < n; i++) {
+      L[i] = this.ringL[this.r % RING];
+      R && (R[i] = this.ringR[this.r % RING]);
+      this.r++;
+    }
+    return true;
+  }
+}
+registerProcessor('mrt2-processor', MRT2Processor);
+`;
+
+    const PIANO_MOOD_PRESET = {
+      calm: 'ambient pads', tense: 'cinematic strings',
+      action: 'drum and bass', sad: 'lo-fi hip hop',
+      mysterious: 'synthwave', triumphant: 'cinematic strings',
+      neutral: 'jazz piano trio',
+    };
+    const PIANO_PRESETS = [
+      'jazz piano trio','ambient pads','cinematic strings','drum and bass',
+      'lo-fi hip hop','synthwave','funk groove','classical piano',
+      'reggae','metal','bossa nova','bluegrass',
+    ];
+
+    // Key layout
+    let mOctaveBase = 48; // C3
+    const M_WHITE_KEYS    = ['a','s','d','f','g','h','j','k','l'];
+    const M_BLACK_KEYS    = ['w','e',null,'t','y','u',null,'o',null];
+    const M_WHITE_OFFSETS = [0,2,4,5,7,9,11,12,14];
+    const M_BLACK_OFFSETS = [1,3,-1,6,8,10,-1,13,-1];
+    const M_IS_BLACK = [false,true,false,true,false,false,true,false,true,false,true,false];
+    const M_NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+    function mKeyToMidi(k) {
+      const wi = M_WHITE_KEYS.indexOf(k);
+      if (wi >= 0) return mOctaveBase + M_WHITE_OFFSETS[wi];
+      const bi = M_BLACK_KEYS.indexOf(k);
+      if (bi >= 0 && M_BLACK_OFFSETS[bi] >= 0) return mOctaveBase + M_BLACK_OFFSETS[bi];
+      return -1;
+    }
+
+    // Audio graph
+    let mActx = null, mWorkletNode = null, mGainNode = null;
+    let mWs = null, mConnected = false;
+    let mCurrentPrompt = 'jazz piano trio';
+
+    // DOM refs
+    const mKeyboard    = document.getElementById('m-keyboard');
+    const mOctLabel    = document.getElementById('m-octave-label');
+    const mPresetSel   = document.getElementById('m-preset-select');
+    const mCfgRange    = document.getElementById('m-cfg-range');
+    const mVolRange    = document.getElementById('m-vol-range');
+    const mStrumChk    = document.getElementById('m-strum-chk');
+    const mMidiSel     = document.getElementById('m-midi-select');
+    const mPlayBtn     = document.getElementById('piano-play-btn');
+    const mStatusBadge = document.getElementById('piano-status');
+
+    function mSetStatus(cls, text) {
+      mStatusBadge.className = cls;
+      mStatusBadge.textContent = text;
+    }
+
+    function mSend(action, payload = {}) {
+      if (mWs?.readyState === WebSocket.OPEN)
+        mWs.send(JSON.stringify({ service: 'magenta', action, ...payload }));
+    }
+
+    function mSendConfig() {
+      mSend('config', {
+        strum: mStrumChk.checked,
+        cfg_musiccoca: parseFloat(mCfgRange.value),
+        cfg_notes: parseFloat(mCfgRange.value) * 0.6,
+      });
+    }
+
+    // Gain: mute when nothing is held
+    const mHeldNotes = new Set();
+    function mUpdateGain() {
+      if (!mGainNode) return;
+      const vol = mVolRange.value / 100;
+      mGainNode.gain.setTargetAtTime(mHeldNotes.size > 0 ? vol : 0, mActx.currentTime, 0.05);
+    }
+
+    function mNoteOn(n) {
+      if (mHeldNotes.has(n)) return;
+      mHeldNotes.add(n);
+      mKeyboard.querySelectorAll(`[data-note="${n}"]`).forEach(e => e.classList.add('active'));
+      if (!mConnected) mPlayBtn.click();
+      mSend('note_on', { pitch: n, velocity: 100 });
+      mUpdateGain();
+    }
+    function mNoteOff(n) {
+      mHeldNotes.delete(n);
+      mKeyboard.querySelectorAll(`[data-note="${n}"]`).forEach(e => e.classList.remove('active'));
+      mSend('note_off', { pitch: n });
+      mUpdateGain();
+    }
+    function mReleaseAll() {
+      for (const n of [...mHeldNotes]) mNoteOff(n);
+    }
+    document.addEventListener('pointerup',     mReleaseAll);
+    document.addEventListener('pointercancel', mReleaseAll);
+
+    // Keyboard shortcuts
+    const mHeldKeys = new Set();
+    document.addEventListener('keydown', e => {
+      if (e.repeat || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+      const k = e.key.toLowerCase();
+      if (k === 'z') { mOctaveBase = Math.max(24, mOctaveBase - 12); mUpdateOctave(); return; }
+      if (k === 'x') { mOctaveBase = Math.min(84, mOctaveBase + 12); mUpdateOctave(); return; }
+      if (mHeldKeys.has(k)) return;
+      mHeldKeys.add(k);
+      const n = mKeyToMidi(k); if (n >= 0) mNoteOn(n);
+    });
+    document.addEventListener('keyup', e => {
+      const k = e.key.toLowerCase(); mHeldKeys.delete(k);
+      const n = mKeyToMidi(k); if (n >= 0) mNoteOff(n);
+    });
+    function mUpdateOctave() {
+      mOctLabel.textContent = 'C' + (Math.floor(mOctaveBase / 12) - 1);
+      mBuildKeyboard();
+    }
+
+    document.getElementById('m-oct-dn').addEventListener('click', () => { mOctaveBase = Math.max(24, mOctaveBase - 12); mUpdateOctave(); });
+    document.getElementById('m-oct-up').addEventListener('click', () => { mOctaveBase = Math.min(84, mOctaveBase + 12); mUpdateOctave(); });
+
+    // MIDI
+    let mMidiAccess = null;
+    async function mInitMidi() {
+      if (!navigator.requestMIDIAccess) return;
+      try {
+        mMidiAccess = await navigator.requestMIDIAccess();
+        mPopulateMidi();
+        mMidiAccess.onstatechange = mPopulateMidi;
+      } catch { console.warn('Web MIDI unavailable'); }
+    }
+    function mPopulateMidi() {
+      if (!mMidiAccess) return;
+      const prev = mMidiSel.value;
+      mMidiSel.innerHTML = '<option value="">— MIDI —</option>';
+      mMidiAccess.inputs.forEach(inp => {
+        const o = document.createElement('option');
+        o.value = inp.id; o.textContent = inp.name ?? inp.id;
+        mMidiSel.appendChild(o);
+      });
+      mMidiSel.value = prev;
+      mBindMidi();
+    }
+    function mBindMidi() {
+      if (!mMidiAccess) return;
+      mMidiAccess.inputs.forEach(inp => {
+        inp.onmidimessage = mMidiSel.value === inp.id ? mOnMidi : null;
+      });
+    }
+    mMidiSel.addEventListener('change', mBindMidi);
+    function mOnMidi(e) {
+      const [status, pitch, velocity] = e.data;
+      const type = status & 0xf0;
+      const isDrum = (status & 0x0f) === 9;
+      if (type === 0x90 && velocity > 0) {
+        if (isDrum) mSend('drum', { velocity });
+        else mNoteOn(pitch);
+      } else if (type === 0x80 || (type === 0x90 && velocity === 0)) {
+        if (!isDrum) mNoteOff(pitch);
+      }
+    }
+
+    // Piano keyboard rendering
+    function mBuildKeyboard() {
+      mKeyboard.innerHTML = '';
+      const blacks = [];
+      let wi = 0;
+      for (let n = mOctaveBase; n < mOctaveBase + 15; n++) {
+        const pc = n % 12;
+        if (!M_IS_BLACK[pc]) {
+          const el = document.createElement('div');
+          el.className = 'key-white'; el.dataset.note = n;
+          el.innerHTML = `<span class="key-label">${M_NOTE_NAMES[pc]}${Math.floor(n/12)-1}</span>`;
+          mKeyboard.appendChild(el);
+          wi++;
+        } else {
+          blacks.push({ wi, note: n });
+        }
+      }
+      const W = 42;
+      blacks.forEach(({ wi: w, note }) => {
+        const el = document.createElement('div');
+        el.className = 'key-black'; el.dataset.note = note;
+        el.style.left = (w * W - 9) + 'px';
+        mKeyboard.appendChild(el);
+      });
+      mKeyboard.querySelectorAll('.key-white,.key-black').forEach(el => {
+        el.addEventListener('pointerdown', e => { e.preventDefault(); mNoteOn(+el.dataset.note); });
+        el.addEventListener('pointerup',   () => mNoteOff(+el.dataset.note));
+        el.addEventListener('pointerout',  () => mNoteOff(+el.dataset.note));
+      });
+    }
+
+    // Preset loading
+    function mPopulatePresets() {
+      mPresetSel.innerHTML = '';
+      PIANO_PRESETS.forEach(name => {
+        const o = document.createElement('option');
+        o.value = name; o.textContent = name;
+        mPresetSel.appendChild(o);
+      });
+    }
+    mPresetSel.addEventListener('change', () => {
+      mCurrentPrompt = mPresetSel.value;
+      mSend('prompt', { text: mCurrentPrompt });
+    });
+
+    // Volume slider respects mute state
+    mVolRange.addEventListener('input', () => {
+      if (mGainNode)
+        mGainNode.gain.setTargetAtTime(mHeldNotes.size > 0 ? mVolRange.value/100 : 0, mActx.currentTime, 0.01);
+    });
+    mCfgRange.addEventListener('input', mSendConfig);
+    mStrumChk.addEventListener('change', mSendConfig);
+
+    // Connect / disconnect
+    async function mConnect() {
+      mSetStatus('connecting', 'Connecting…');
+      mActx = new AudioContext({ sampleRate: 48000 });
+      const blob = new Blob([PIANO_WORKLET_SRC], { type: 'application/javascript' });
+      await mActx.audioWorklet.addModule(URL.createObjectURL(blob));
+      mWorkletNode = new AudioWorkletNode(mActx, 'mrt2-processor', {
+        numberOfOutputs: 1, outputChannelCount: [2],
+      });
+      mGainNode = mActx.createGain();
+      mGainNode.gain.value = 0; // start muted; unmutes on first note
+      mWorkletNode.connect(mGainNode);
+      mGainNode.connect(mActx.destination);
+
+      mWs = new WebSocket(MAGENTA_WS_URL);
+      mWs.binaryType = 'arraybuffer';
+      mWs.onopen = () => {
+        mConnected = true;
+        mSend('start', { prompt: mCurrentPrompt });
+        mSendConfig();
+        mHeldNotes.forEach(n => mSend('note_on', { pitch: n, velocity: 100 }));
+        mPlayBtn.textContent = '■ Stop';
+        mSetStatus('connecting', 'Embedding…');
+      };
+      mWs.onmessage = (e) => {
+        if (e.data instanceof ArrayBuffer) {
+          mWorkletNode.port.postMessage(new Float32Array(e.data));
+        } else {
+          try { mHandleEvent(JSON.parse(e.data)); } catch {}
+        }
+      };
+      mWs.onerror = () => { mSetStatus('error', 'WS error'); mTeardown(); };
+      mWs.onclose = () => mTeardown();
+    }
+
+    function mHandleEvent(msg) {
+      if (msg.service !== 'magenta') return;
+      if (msg.event === 'status' && msg.state === 'embedding') {
+        mSetStatus('connecting', 'Embedding…');
+      } else if (msg.event === 'ready') {
+        mSetStatus('streaming', 'Streaming');
+      } else if (msg.event === 'stopped') {
+        mTeardown();
+      } else if (msg.event === 'error') {
+        mSetStatus('error', msg.message || 'error'); mTeardown();
+      }
+    }
+
+    function mTeardown() {
+      mConnected = false;
+      mReleaseAll();
+      mWs?.close(); mWs = null;
+      mWorkletNode?.disconnect(); mWorkletNode = null;
+      mGainNode?.disconnect(); mGainNode = null;
+      mActx?.close(); mActx = null;
+      mPlayBtn.textContent = '▶ Play';
+      mSetStatus('', 'Idle');
+    }
+
+    mPlayBtn.addEventListener('click', async () => {
+      if (mConnected) { mSend('stop'); mTeardown(); return; }
+      try { await mConnect(); }
+      catch (e) { mSetStatus('error', String(e)); mTeardown(); }
+    });
+
+    // Init
+    mPopulatePresets();
+    mUpdateOctave();
+    mInitMidi();
   </script>
 </body>
 </html>

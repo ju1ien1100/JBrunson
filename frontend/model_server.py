@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import io
+import uuid
 import json
 import os
 import sys
@@ -62,11 +63,12 @@ SUNO_BASE = "https://api.suno.com"
 SUNO_POLL_INTERVAL = 3.0
 SUNO_POLL_TIMEOUT = 180.0
 ANIME_VOICE_STYLE = (
-    "a cappella, voice only, no instruments, no background music, no beat, "
+    "spoken word, solo, voice only, no instruments, no background music, no beat, "
     "spoken word, anime female voice, kawaii, clear speech, dry vocal"
 )
 ANIME_VOICE_ID = "5b915c6d-8d96-416c-9755-eba65868cfef"
 VISION_MODEL = "claude-haiku-4-5"
+PANEL_VISION_MODEL = "claude-sonnet-4-6"  # higher-capability model for panel boundary detection
 FIRST_BATCH = 3  # pages needed before reader unlocks; rest generate in background
 VISION_SYSTEM = (
     "You score a single comic/manga/book page for a three-layer audio engine. "
@@ -115,7 +117,7 @@ def _detect_panels(page_png: bytes) -> list[list[float]]:
     img_b64 = base64.b64encode(page_png).decode("ascii")
     client = anthropic.Anthropic()
     resp = client.messages.parse(
-        model=VISION_MODEL,
+        model=PANEL_VISION_MODEL,
         max_tokens=2048,
         system=PANEL_SYSTEM,
         messages=[{
@@ -193,23 +195,18 @@ def _pcm32_to_wav(pcm_bytes: bytes) -> bytes:
     return buf.getvalue()
 
 
-def _to_mp3(audio_bytes: bytes) -> bytes:
+def _to_mp3(audio_bytes: bytes) -> bytes | None:
     """Transcode arbitrary audio bytes to MP3 (browser-playable).
 
-    Suno returns Opus-in-MP4, which browsers' <audio> cannot decode, so the
-    voice track is silent. Normalize to MP3 so the 'audio/mpeg' track header is
-    accurate. Uses the static ffmpeg from imageio-ffmpeg (no system ffmpeg).
+    Returns None if imageio_ffmpeg is not installed (voice track is skipped).
     Blocking — call via run_in_executor from async code.
-
-    FUTURE SCOPE — make this edge-friendly: spawning a bundled ffmpeg per clip
-    is heavy for edge/mobile/serverless. Options: (1) decode client-side via a
-    WASM/WebCodecs Opus decoder (no server transcode); (2) request a web-native
-    format (AAC/MP3) from Suno up front; (3) chunked stream-transcode instead
-    of buffering; (4) a pure-Python/WASM path with no native ffmpeg dependency.
     """
     import subprocess
 
-    import imageio_ffmpeg
+    try:
+        import imageio_ffmpeg
+    except ImportError:
+        return None
 
     ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
     proc = subprocess.run(
@@ -260,15 +257,21 @@ async def _gen_magenta(pdf_n: int) -> None:
         mood = _state["page_data"][pdf_n].get("magenta_mood", "neutral")
         style = _state["page_data"][pdf_n].get("stable_audio_prompt", "ambient music")
         print(f"[p{pdf_n}] magenta: mood={mood!r}", flush=True)
+        session_id = f"panel_{pdf_n}_{uuid.uuid4().hex[:8]}"
         try:
-            notes = melody_for_mood(mood)
-            style_bytes = await _magenta_cls.embed_style.remote.aio(style)
-            pcm = await _magenta_cls.render.remote.aio(style_bytes, notes)
+            notes_segs = melody_for_mood(mood)
+            await _magenta_cls.begin_session.remote.aio(session_id, style)
+            pcm = await _magenta_cls.render_melody.remote.aio(session_id, notes_segs)
             _state["magenta_wavs"][pdf_n] = _pcm32_to_wav(pcm)
             print(f"[p{pdf_n}] magenta done ({len(_state['magenta_wavs'][pdf_n])//1024} KB)", flush=True)
         except Exception as e:
             print(f"[p{pdf_n}] magenta ERROR: {e}", flush=True)
             _state["magenta_wavs"][pdf_n] = b""
+        finally:
+            try:
+                await _magenta_cls.end_session.remote.aio(session_id)
+            except Exception:
+                pass
     _state["progress"][pdf_n]["magenta"] = True
     await _broadcast({"type": "progress", "pdf_page": pdf_n, "track": "magenta", "done": True})
 
@@ -323,12 +326,14 @@ async def _gen_suno(pdf_n: int) -> None:
             if audio_url:
                 async with session.get(audio_url) as r:
                     raw_audio = await r.read()
-                # Suno returns Opus-in-MP4 (mislabeled audio/mpeg); browsers can't
-                # play it. Transcode to real MP3 so the voice track is audible.
                 try:
                     mp3 = await loop.run_in_executor(None, _to_mp3, raw_audio)
-                    _state["suno_wavs"][pdf_n] = mp3
-                    print(f"[p{pdf_n}] suno done ({len(mp3)//1024} KB MP3)", flush=True)
+                    if mp3 is None:
+                        print(f"[p{pdf_n}] suno: imageio_ffmpeg not installed, skipping voice", flush=True)
+                        _state["suno_wavs"][pdf_n] = None
+                    else:
+                        _state["suno_wavs"][pdf_n] = mp3
+                        print(f"[p{pdf_n}] suno done ({len(mp3)//1024} KB MP3)", flush=True)
                 except Exception as e:
                     print(f"[p{pdf_n}] suno transcode ERROR: {e}", flush=True)
                     _state["suno_wavs"][pdf_n] = None
@@ -345,9 +350,9 @@ async def _gen_suno(pdf_n: int) -> None:
 
 
 async def _wait_for_page(pdf_n: int) -> None:
-    while (pdf_n not in _state["stable_wavs"]
-           or pdf_n not in _state["magenta_wavs"]
-           or pdf_n not in _state["suno_wavs"]):
+    # Wait only for stable audio — melody/voice served if available, skipped if not.
+    # This avoids blocking on the cold-start container or slow magenta/suno runs.
+    while pdf_n not in _state["stable_wavs"]:
         await asyncio.sleep(0.2)
 
 
@@ -440,19 +445,16 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
         nonlocal reader_unlocked
         while not reader_unlocked:
             await asyncio.sleep(0.5)
-            if all(
+            # Unlock as soon as ANY panel has stable audio ready — avoids
+            # blocking on the cold-start container (which hits the first call).
+            if any(
                 _state["progress"].get(n, {}).get("stable")
-                and _state["progress"].get(n, {}).get("magenta")
-                and _state["progress"].get(n, {}).get("suno")
-                for n in first_batch
+                for n in pdf_page_nums
             ):
                 reader_unlocked = True
                 _state["status"] = "reader_ready"
                 await _broadcast({"type": "status", "status": "reader_ready"})
-                print(
-                    f"First {len(first_batch)} page(s) ready — reader unlocked.",
-                    flush=True,
-                )
+                print("Stable audio ready on first panel — reader unlocked.", flush=True)
 
     watch_task = asyncio.create_task(_watch_first_batch())
 
@@ -687,15 +689,40 @@ async def handle_ws(request: web.Request) -> web.WebSocketResponse:
     return ws
 
 
+# ── CORS middleware ───────────────────────────────────────────────────────────
+
+@web.middleware
+async def cors_middleware(request: web.Request, handler):
+    if request.method == "OPTIONS":
+        resp = web.Response()
+    else:
+        try:
+            resp = await handler(request)
+        except web.HTTPException as ex:
+            resp = ex
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resp
+
+
+async def handle_options(request: web.Request) -> web.Response:
+    return web.Response()
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 def make_app() -> web.Application:
-    app = web.Application(client_max_size=200 * 1024 * 1024)  # 200 MB upload limit
+    app = web.Application(client_max_size=200 * 1024 * 1024, middlewares=[cors_middleware])
     app.router.add_get("/", handle_index)
     app.router.add_post("/peek", handle_peek)
     app.router.add_post("/upload", handle_upload)
     app.router.add_get("/status", handle_status)
     app.router.add_get("/ws", handle_ws)
+    # Preflight OPTIONS for CORS
+    app.router.add_route("OPTIONS", "/peek", handle_options)
+    app.router.add_route("OPTIONS", "/upload", handle_options)
+    app.router.add_route("OPTIONS", "/status", handle_options)
     return app
 
 

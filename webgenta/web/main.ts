@@ -21,8 +21,14 @@ const serverInput = document.getElementById("server") as HTMLInputElement;
 const connectBtn = document.getElementById("connect-btn") as HTMLButtonElement;
 const statusEl = document.getElementById("status") as HTMLSpanElement;
 const midiSelect = document.getElementById("midi-select") as HTMLSelectElement;
+const instrumentSelect = document.getElementById("instrument-select") as HTMLSelectElement;
+const cfgSlider = document.getElementById("cfg-slider") as HTMLInputElement;
+const cfgLabel = document.getElementById("cfg-label") as HTMLSpanElement;
 const canvas = document.getElementById("viz") as HTMLCanvasElement;
 const ctx2d = canvas.getContext("2d")!;
+
+// Instruments that allow continuous retriggering (strum/bow/arpeggiate)
+const STRUM_INSTRUMENTS = new Set(["guitar", "strings", "synth"]);
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
@@ -108,6 +114,23 @@ function bindMidiInput() {
 
 midiSelect.addEventListener("change", bindMidiInput);
 
+// ─── Generation config ────────────────────────────────────────────────────────
+
+function sendConfig() {
+  send("config", {
+    strum: STRUM_INSTRUMENTS.has(instrumentSelect.value),
+    cfg_musiccoca: parseFloat(cfgSlider.value),
+    cfg_notes: parseFloat(cfgSlider.value) * 0.6,  // notes adherence scales with style
+  });
+}
+
+cfgSlider.addEventListener("input", () => {
+  cfgLabel.textContent = cfgSlider.value;
+  sendConfig();
+});
+
+instrumentSelect.addEventListener("change", sendConfig);
+
 function onMidiMessage(e: MIDIMessageEvent) {
   const [status, pitch, velocity] = e.data;
   const type = status & 0xf0;
@@ -144,8 +167,8 @@ async function initAudio(serverUrl: string, prompt: string) {
   ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
-    // New protocol: start the Magenta service with a prompt
     send("start", { prompt });
+    sendConfig();
     setStatus("embedding");
     startViz();
   };
