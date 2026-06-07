@@ -44,7 +44,7 @@ from aiohttp import web
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent / "kumiko"))  # kumiko + its lib/ subpackage
-from midi_library import melody_for_mood  # noqa: E402
+from midi_library import melody_for_mood, transpose_segments, scale_tempo_segments, KEY_SEMITONES  # noqa: E402
 
 # Load .env so API keys are available regardless of how the script was launched
 _ENV_FILE = Path(__file__).parent.parent / "webgenta" / ".env"
@@ -77,7 +77,7 @@ PANEL_VISION_MODEL = "claude-sonnet-4-6"  # higher-capability model for panel bo
 FIRST_BATCH = 3  # pages needed before reader unlocks; rest generate in background
 VISION_SYSTEM = (
     "You score a single comic/manga/book page for a three-layer audio engine. "
-    "Look at the art and any text, then produce all five fields:\n"
+    "Look at the art and any text, then produce all eight fields:\n"
     "READING ORDER: First infer the layout direction. Manga and Japanese comics "
     "are read RIGHT-TO-LEFT, top-to-bottom — start at the top-right panel/bubble "
     "and move leftward, then down. Western comics are read left-to-right. Use the "
@@ -94,6 +94,11 @@ VISION_SYSTEM = (
     f"  {VOICE_FEMALE} — female voice (women, girls, feminine or neutral characters)\n"
     f"  {VOICE_MALE}   — low male voice (men, older characters, deep/authoritative voices)\n"
     "Pick whichever fits the speaker. If there is no dialogue, still return a voice_id.\n"
+    "music_key: Root note that fits the panel's emotional tone. Examples: C, A, F#, Bb.\n"
+    "music_scale: One of: major, minor, dorian, pentatonic_major, pentatonic_minor. "
+    "Tense/dark panels → minor or dorian. Action/triumphant → major. "
+    "Mysterious → dorian or pentatonic_minor.\n"
+    "tempo_bpm: Integer BPM (60–180). Calm → 60–80. Action → 120–160. Neutral → 90–110.\n"
     "reason: Brief justification."
 )
 MOODS = ("calm", "tense", "action", "sad", "mysterious", "triumphant", "neutral")
@@ -303,7 +308,11 @@ async def _gen_stable(pdf_n: int) -> None:
         _state["stable_wavs"][pdf_n] = b""
     else:
         prompt = _state["page_data"][pdf_n].get("stable_audio_prompt", "ambient music")
-        print(f"[p{pdf_n}] stable: {prompt[:70]!r}…", flush=True)
+        key   = _state["page_data"][pdf_n].get("music_key", "C")
+        scale = _state["page_data"][pdf_n].get("music_scale", "major")
+        bpm   = _state["page_data"][pdf_n].get("tempo_bpm", 90)
+        prompt = f"{prompt}, key of {key} {scale}, {bpm} BPM"
+        print(f"[p{pdf_n}] stable: {prompt[:80]!r}…", flush=True)
         try:
             wav = await _stable_cls.generate.remote.aio(prompt, STABLE_AUDIO_DURATION)
             _state["stable_wavs"][pdf_n] = wav
@@ -319,12 +328,19 @@ async def _gen_magenta(pdf_n: int) -> None:
     if _magenta_cls is None:
         _state["magenta_wavs"][pdf_n] = b""
     else:
-        mood = _state["page_data"][pdf_n].get("magenta_mood", "neutral")
+        mood  = _state["page_data"][pdf_n].get("magenta_mood", "neutral")
+        key   = _state["page_data"][pdf_n].get("music_key", "C")
+        scale = _state["page_data"][pdf_n].get("music_scale", "major")
+        bpm   = _state["page_data"][pdf_n].get("tempo_bpm", 90)
         style = _state["page_data"][pdf_n].get("stable_audio_prompt", "ambient music")
-        print(f"[p{pdf_n}] magenta: mood={mood!r}", flush=True)
+        style = f"{style}, key of {key} {scale}, {bpm} BPM"
+        print(f"[p{pdf_n}] magenta: mood={mood!r} key={key} scale={scale} bpm={bpm}", flush=True)
         session_id = f"panel_{pdf_n}_{uuid.uuid4().hex[:8]}"
         try:
             notes_segs = melody_for_mood(mood)
+            semitones  = KEY_SEMITONES.get(key, 0)
+            notes_segs = transpose_segments(notes_segs, semitones)
+            notes_segs = scale_tempo_segments(notes_segs, bpm)
             await _magenta_cls.begin_session.remote.aio(session_id, style)
             pcm = await _magenta_cls.render_melody.remote.aio(session_id, notes_segs)
             _state["magenta_wavs"][pdf_n] = _pcm32_to_wav(pcm)
@@ -435,6 +451,9 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
         ]
         suno_lyrics: str
         suno_voice_id: str  # str (not Literal) so Pydantic accepts any value; _VALID_VOICE_IDS guards at use site
+        music_key: str       # e.g. "C", "A", "F#", "Bb"
+        music_scale: Literal["major", "minor", "dorian", "pentatonic_major", "pentatonic_minor"]
+        tempo_bpm: int       # 60–180
         reason: str
 
     client = anthropic.Anthropic()
@@ -459,12 +478,16 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
         )
         pm = resp.parsed_output
         voice_id = pm.suno_voice_id if pm.suno_voice_id in _VALID_VOICE_IDS else VOICE_DEFAULT
+        bpm = max(60, min(180, pm.tempo_bpm)) if isinstance(pm.tempo_bpm, int) else 90
         return {
             "page_number": pnum,
             "stable_audio_prompt": pm.stable_audio_prompt.strip() or "ambient background music",
             "magenta_mood": pm.magenta_mood,
             "suno_lyrics": pm.suno_lyrics.strip(),
             "suno_voice_id": voice_id,
+            "music_key": pm.music_key.strip() if pm.music_key.strip() in KEY_SEMITONES else "C",
+            "music_scale": pm.music_scale,
+            "tempo_bpm": bpm,
             "reason": pm.reason,
         }
 
@@ -497,6 +520,9 @@ async def _analyze_and_generate(pdf_page_nums: list[int]) -> None:
             "pdf_page": pnum,
             "mood": result["magenta_mood"],
             "has_lyrics": bool(result["suno_lyrics"]),
+            "music_key": result["music_key"],
+            "music_scale": result["music_scale"],
+            "tempo_bpm": result["tempo_bpm"],
         })
 
         # Immediately queue generation for this page
